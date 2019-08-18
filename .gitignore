@@ -102,3 +102,21 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# custom
+*.pkl
+*.xlsx
+*.xls
+*.csv
+*.zip
+*.7z
+*.xlsm
+*.pptx
+*.ppt
+*.hdf5
+
+# custom ignore folders
+log/
+input/
+output/
+data/
