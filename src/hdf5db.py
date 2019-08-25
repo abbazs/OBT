@@ -148,6 +148,11 @@ class hdf5db(object):
             print_exception(e)
 
     def get_all_strike_data(self, st, nd, expd):
+        """
+        Gets the strike data between given start and end
+        for the given expiry date.
+        returns a data frame sorted in ascending order by `TIMESTAMP`
+        """
         try:
             s = self.symbol
             i = "OPTIDX"

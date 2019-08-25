@@ -6,16 +6,17 @@ STRANGLE_COLUMNS = [
     "POI",
     "PCOI",
     "CLOSE",
-    "CS",
     "PS",
-    "CALL_CLOSE",
+    "CS",
     "PUT_CLOSE",
+    "CALL_CLOSE",
     "TP",
+    "APNL",
     "PNL",
     "WIDTH",
     "LBK",
     "UBK",
-    "LW",
-    "UW",
-    "WR",
+    "LW", # Lower width
+    "UW", # Upper width
+    "WR", # Ratio of upper and lower width
 ]

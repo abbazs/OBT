@@ -15,7 +15,7 @@ from openpyxl.worksheet.hyperlink import Hyperlink, HyperlinkList
 from src.log import print_exception
 
 
-def create_worksheet(ew, df, name, file_name):
+def create_worksheet(ew, df, name, file_name, index=1):
     df.to_excel(excel_writer=ew, sheet_name=name)
     ws = ew.book[name]
     cels = [f"A{x}" for x in range(2, len(df) + 3)]
@@ -26,10 +26,12 @@ def create_worksheet(ew, df, name, file_name):
         ws[cl].style = "custom_datetime1"
     ws.column_dimensions["A"].width = 11
     ws.column_dimensions["B"].width = 11
-    hyp = f"{file_name}#'SUMMARY'!A1"
+    # Helps to navigate to parent sheet
+    hyp = f"{file_name}#'SUMMARY'!B{index + 2}"
     ws["A1"].hyperlink = hyp
     ws["A1"].hyperlink.location = hyp.split("#")[1]
     ws["A1"].style = "custom_datetime"
+
 
 def create_summary_sheet(ew, df, file_name):
     df.to_excel(excel_writer=ew, sheet_name="SUMMARY")
