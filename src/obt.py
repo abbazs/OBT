@@ -69,6 +69,7 @@ class obt(object):
         """
         if expd is None:
             expd = nd
+        
         print("Building strangle", end=",")
         print(f" Start : {st:%Y-%m-%d}", end=",")
         print(f" End : {nd:%Y-%m-%d}", end=",")
@@ -108,6 +109,9 @@ class obt(object):
         strangle = strangle.assign(WIDTH=strangle.CS - strangle.PS)
         strangle = strangle.assign(UBK=strangle.CS + tp)
         strangle = strangle.assign(LBK=strangle.PS - tp)
+        strangle = strangle.assign(UW=strangle.CS - strangle.CLOSE)
+        strangle = strangle.assign(LW=strangle.CLOSE - strangle.PS)
+        strangle = strangle.assign(WR=strangle.UW/strangle.LW)
         strangle = strangle.assign(ED=expd)
         return strangle[STRANGLE_COLUMNS]
 

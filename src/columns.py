@@ -15,4 +15,7 @@ STRANGLE_COLUMNS = [
     "WIDTH",
     "LBK",
     "UBK",
+    "LW",
+    "UW",
+    "WR",
 ]
