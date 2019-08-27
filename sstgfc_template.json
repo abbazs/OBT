@@ -1,0 +1,9 @@
+{
+    "ST": "START DATE",
+    "ND": "END DATE",
+    "ED": "EXPIRY DATE",
+    "CS": "CALL STRIKE",
+    "PS": "PUT STRIKE",
+    "CPR": "CALL PRICE",
+    "PPR": "PUT PRICE"
+}
