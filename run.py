@@ -8,12 +8,14 @@ from src.obt import obt
 
 @click.group()
 @click.option("-symbol", default="NIFTY")
+@click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
 @click.pass_context
-def cli(ctx, symbol):
+def cli(ctx, symbol, mitr):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
     ob.symbol = symbol
+    ob.MITR = mitr
     ctx.obj["OBT"] = ob
 
 
@@ -42,15 +44,16 @@ def stg(ctx, nexp, which_month, price):
 @click.option("-ND", help="End date", default=None)
 @click.option("-ED", help="Expiry date", default=None)
 @click.option("-price", help="what price strangle needs to be created", default=50)
-def sstg(ctx, ST, ND, ED, price):
+def sstg(ctx, st, nd, ed, price, mitr):
     """ Run strangle """
-    ctx.obj["ST"] = ST
-    ctx.obj["ND"] = ND
-    ctx.obj["ED"] = ED
+    ctx.obj["ST"] = st
+    ctx.obj["ND"] = nd
+    ctx.obj["ED"] = ed
     ctx.obj["PR"] = price
     print(ctx.obj)
     ob = ctx.obj["OBT"]
-    ob.e2e_SSG_SE_by_price(ST, ND, ED, price)
+    ob.MITR = mitr
+    ob.e2e_SSG_SE_by_price(st, nd, ed, price)
 
 
 @cli.command(
@@ -116,6 +119,17 @@ def ssr(ctx, nexp, month):
     """ Run straddle """
     ob = ctx.obj["OBT"]
     ob.e2e_SSR(nexp, month)
+
+
+@cli.command(help="Study straddles for start, end and expiry days")
+@click.pass_context
+@click.option("-ST", help="Start date", default=None)
+@click.option("-ND", help="End date", default=None)
+@click.option("-ED", help="Expiry date", default=None)
+def ssrs(ctx, st, nd, ed):
+    """ Run straddle """
+    ob = ctx.obj["OBT"]
+    ob.e2e_SSR_SE(st, nd, ed)
 
 
 if __name__ == "__main__":

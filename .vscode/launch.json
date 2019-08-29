@@ -1,0 +1,48 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: run.py sstg",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}\\run.py",
+            "args": [
+                "sstg",
+                "-ST=2019-04-26",
+                "-ND=2019-05-30",
+                "-ED=2019-05-30",
+                "-price=50"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: run.py ssrs",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}\\run.py",
+            "args": [
+                "ssrs",
+                "-ST=2018-10-26",
+                "-ND=2018-11-29",
+                "-ED=2018-11-29",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "args": [
+                "stg",
+                "-nexp=12"
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}
