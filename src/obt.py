@@ -149,6 +149,7 @@ class obt(object):
         psp = df.iloc[0]["PUT_CLOSE"]
         # total premium
         tp = csp + psp
+        # APNL - Actual profit and loss with out adjustments
         df = df.assign(APNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
         df = self.calculate_repaired_pnl(df, tp)
         return df
@@ -160,13 +161,15 @@ class obt(object):
         df = df.assign(WIDTH=df.CS - df.PS)
         df = df.assign(UBK=df.CS + tp)
         df = df.assign(LBK=df.PS - tp)
-        df = df.assign(UW=df.CS - df.CLOSE)
-        df = df.assign(LW=df.CLOSE - df.PS)
+        df = df.assign(CBK=df.CS + df["CALL_CLOSE"].iloc[0])
+        df = df.assign(PBK=df.PS - df["PUT_CLOSE"].iloc[0])
+        df = df.assign(UW=df.CS - df.SPOT)
+        df = df.assign(LW=df.SPOT - df.PS)
         df = df.assign(WR=df.UW / df.LW)
         return df
 
-    def repair_position(self, df, price, itr):
-        """ Repairs a position
+    def repair_strangle(self, df, price, itr):
+        """ Repairs a strangle position
         Which ever leg is in profit, more than 50% of price
         close it and move to the next strike available at
         the price.
@@ -176,7 +179,6 @@ class obt(object):
         if itr > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
             return df
-        adj = None
         # Repair adjustment trigger
         rat = price * self.RAT
         dfs = df.query("PUT_CLOSE>=@rat or CALL_CLOSE>=@rat")
@@ -184,9 +186,7 @@ class obt(object):
             print("No repair required...")
             return df
         #
-        dfii = None
-        for x in dfs.iloc[0:1].itertuples():
-            dfii = x
+        dfii = dfs.iloc[0]
         # Calculate adjustment profit and loss
         if dfii.PUT_CLOSE >= rat:
             print("Put adjustment")
@@ -194,7 +194,7 @@ class obt(object):
             adl = df.iloc[0].PUT_CLOSE - dfii.PUT_CLOSE
             # Adjustment proift
             adp = df.iloc[0].CALL_CLOSE - dfii.CALL_CLOSE
-            # New priece to be adjusted for
+            # New price to be adjusted for
             call_price = rat  # Move call twice the price
             put_price = price  # Move put for the same price
         elif dfii.CALL_CLOSE >= rat:
@@ -203,7 +203,7 @@ class obt(object):
             adl = df.iloc[0].CALL_CLOSE - dfii.CALL_CLOSE
             # Adjustment proift
             adp = df.iloc[0].PUT_CLOSE - dfii.PUT_CLOSE
-            # New priece to be adjusted for
+            # New price to be adjusted for
             call_price = price  # Move call for same price
             put_price = rat  # Move put for twice the price
         else:
@@ -213,15 +213,15 @@ class obt(object):
         print(f"Adjustment loss {adl:.2f}")
         print(f"New call price {call_price:.2f}")
         print(f"New put price {put_price:.2f}")
-        dfc = self.db.get_all_strike_data(dfii.Index, dfii.Index, dfii.ED)
+        dfc = self.db.get_all_strike_data(dfii.name, dfii.name, dfii.ED)
         # Adjust call
         cs = self.get_strike_price(dfc, "CE", call_price)
-        fno = self.db.get_strike_price(dfii.Index, dfii.ED, dfii.ED, "CE", cs)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", cs)
         fno = self.rename_call_columns(fno)
         df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
         # Adjust put
         ps = self.get_strike_price(dfc, "PE", put_price)
-        fno = self.db.get_strike_price(dfii.Index, dfii.ED, dfii.ED, "PE", ps)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", ps)
         fno = self.rename_put_columns(fno)
         df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
         # calculate new target profit
@@ -230,9 +230,63 @@ class obt(object):
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
-        return self.repair_position(df, rat, itr + 1)
+        return self.repair_strangle(df, rat, itr + 1)
 
-    def build_strangle(self, cs, ps, cpr=None, ppr=None):
+    def repair_straddle(self, df, itr):
+        """ Repairs a straddle position
+        """
+        print(f"Repair iteraion ({itr}) : date {df.index[0]:%Y-%m-%d}")
+        if itr > self.MITR:
+            print(f"Stopping repair iteration since max iteration done...")
+            return df
+        # dfloc
+        sdf = df[self.ST:]
+        dfk = sdf.iloc[0]
+        ubk = dfk.UBK * 0.75
+        lbk = dfk.LBK * 1.25
+        # dfs = sdf.query("SPOT>@dfk.CBK or SPOT<@dfk.PBK")
+        dfs = sdf.query("SPOT>@ubk or SPOT<@lbk")
+        if len(dfs) == 0:
+            print(f"No adjustment required...")
+            return df
+        dfii = dfs.iloc[0]
+        # Calculate adjustment profit and loss
+        if dfii.SPOT < dfii.PBK:
+            print("Put adjustment")
+            # Adjustment loss
+            adl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
+            # Adjustment proift
+            adp = dfk.CALL_CLOSE - dfii.CALL_CLOSE
+        elif dfii.SPOT > dfii.CBK:
+            print("Call adjustment")
+            # Adjustment loss
+            adl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
+            # Adjustment proift
+            adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
+        else:
+            raise Exception("Unknown issue don't know what to adjust")
+        self.ST = dfii.name
+        atm = self.get_atm_strike()
+        # Adjust Call
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm.STRIKE_PR)
+        fno = self.rename_call_columns(fno)
+        df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
+        # Adjust Put
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", atm.STRIKE_PR)
+        fno = self.rename_put_columns(fno)
+        df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
+        # Calculate new target profit
+        tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
+        tp = tpl.sum() + adl + adp
+        #
+        dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
+        df.loc[fno.index] = dfr
+        return self.repair_straddle(df, itr + 1)
+
+    def build_ss(self, cs, ps, cpr=None, ppr=None):
+        """
+        Builds both strangle and straddle
+        """
         try:
             st = self.ST
             nd = self.ND
@@ -250,31 +304,33 @@ class obt(object):
             fnocs = self.rename_call_columns(fnocs)
             fnops = self.db.get_strike_price(st, nd, expd, "PE", ps)
             fnops = self.rename_put_columns(fnops)
-            strangle = spot[["SYMBOL", "CLOSE"]].join([fnocs, fnops])
+            spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE":"SPOT"})
+            df = spt.join([fnocs, fnops])
             # call starting price
             if cpr is not None:
-                strangle["CALL_CLOSE"].iat[0] = cpr
-            csp = strangle.iloc[0]["CALL_CLOSE"]
+                df["CALL_CLOSE"].iat[0] = cpr
+            csp = df.iloc[0]["CALL_CLOSE"]
             # put starting price
             if ppr is not None:
-                strangle["PUT_CLOSE"].iat[0] = ppr
-            psp = strangle.iloc[0]["PUT_CLOSE"]
+                df["PUT_CLOSE"].iat[0] = ppr
+            psp = df.iloc[0]["PUT_CLOSE"]
             # total premium
             tp = csp + psp
-            strangle = strangle.assign(TP=tp)
-            strangle = strangle.assign(
-                PNL=tp - strangle[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1)
+            df = df.assign(TP=tp)
+            df = df.assign(ITP=tp)
+            df = df.assign(
+                PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1)
             )
-            strangle = strangle.assign(ED=expd)
-            strangle = self.calculate_pnl(strangle)
-            return strangle[STRANGLE_COLUMNS]
+            df = df.assign(ED=expd)
+            df = self.calculate_pnl(df)
+            return df[STRANGLE_COLUMNS]
         except Exception as e:
             print_exception(e)
             return None
 
-    def build_strangle_by_price(self, price):
+    def build_ss_by_price(self, price):
         """
-        Creates strangle
+        Builds both strangle and straddle
         Returns
         -------
         Not yet defined
@@ -296,7 +352,7 @@ class obt(object):
             df = df[df["TIMESTAMP"] == df["TIMESTAMP"].unique()[0]]
             cs = self.get_strike_price(df, "CE", price)
             ps = self.get_strike_price(df, "PE", price)
-            return self.build_strangle(cs, ps)
+            return self.build_ss(cs, ps)
         except Exception as e:
             print("Error processing", end="-")
             print(f" st='{st:%Y-%m-%d}'", end=",")
@@ -337,7 +393,9 @@ class obt(object):
                 on=["STRIKE_PR"],
                 suffixes=["_C", "_P"],
             ).reset_index(drop=True)
+            # Difference between call and put price
             opm = opm.assign(DIF=(opm["CLOSE_C"] - opm["CLOSE_P"]).abs())
+            # Average price
             opm = opm.assign(PR=opm[["CLOSE_P", "CLOSE_C"]].mean(axis=1))
             # Starting day may not be a trading day, hence do this.
             idx = opm["DIF"].reset_index(drop=True).idxmin()
@@ -379,8 +437,8 @@ class obt(object):
                 self.ST = x.ST
                 self.ND = x.ND
                 self.ED = x.ED
-                sdf = self.build_strangle_by_price(price)
-                rdf = self.repair_position(sdf, price, 1)
+                sdf = self.build_ss_by_price(price)
+                rdf = self.repair_strangle(sdf, price, 1)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", file_name, index=x.Index)
                 smry.append(sdf.iloc[-1])
             except Exception as e:
@@ -400,8 +458,8 @@ class obt(object):
         self.ST = st
         self.ND = nd
         self.ED = ed
-        sdf = self.build_strangle_by_price(price)
-        rdf = self.repair_position(sdf, price, 1)
+        sdf = self.build_ss_by_price(price)
+        rdf = self.repair_strangle(sdf, price, 1)
         file_name = (
             f"{self.symbol}_SSG_"
             f"{self.ED:%Y-%b-%d}"
@@ -423,12 +481,12 @@ class obt(object):
         self.ST = conf["ST"]
         self.ND = conf["ND"]
         self.ED = conf["ED"]
-        sdf = self.build_strangle(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
+        sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
         if (conf["CPR"] is not None) and (conf["PPR"] is not None):
             price = (conf["CPR"] + conf["PPR"]) / 2
         else:
             price = sdf["TP"].iloc[0] / 2
-        rdf = self.repair_position(sdf, price, 1)
+        rdf = self.repair_strangle(sdf, price, 1)
         file_name = (
             f"{self.symbol}_SSG_custom_"
             f"{self.ED:%Y-%b-%d}"
@@ -469,8 +527,8 @@ class obt(object):
                 self.ND = x.ND
                 self.ED = x.ED
                 atm = self.get_atm_strike()
-                sdf = self.build_strangle(atm.STRIKE_PR, atm.STRIKE_PR)
-                rdf = self.repair_position(sdf, atm.PR, 1)
+                sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
+                rdf = self.repair_strangle(sdf, atm.PR, 1)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", file_name, index=x.Index)
                 smry.append(sdf.iloc[-1])
             except Exception as e:
@@ -490,12 +548,12 @@ class obt(object):
         self.ST = conf["ST"]
         self.ND = conf["ND"]
         self.ED = conf["ED"]
-        sdf = self.build_strangle(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
+        sdf = self.build_ss(conf["STRIKE"], conf["STRIKE"], conf["CPR"], conf["PPR"])
         if (conf["CPR"] is not None) and (conf["PPR"] is not None):
             price = (conf["CPR"] + conf["PPR"]) / 2
         else:
             price = sdf["TP"].iloc[0] / 2
-        rdf = self.repair_position(sdf, price, 1)
+        rdf = self.repair_strangle(sdf, price, 1)
         file_name = (
             f"{self.symbol}_SSR_custom_"
             f"{self.ED:%Y-%b-%d}"
@@ -518,8 +576,8 @@ class obt(object):
         self.ND = nd
         self.ED = ed
         atm = self.get_atm_strike()
-        sdf = self.build_strangle(atm.STRIKE_PR, atm.STRIKE_PR)
-        rdf = self.repair_position(sdf, atm.PR, 1)
+        sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
+        rdf = self.repair_straddle(sdf, 1)
         file_name = (
             f"{self.symbol}_SSG_"
             f"{self.ED:%Y-%b-%d}"

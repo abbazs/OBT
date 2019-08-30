@@ -34,6 +34,21 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Python: run.py ssrs 1",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}\\run.py",
+            "args": [
+                "-mitr=1",
+                "ssrs",
+                "-ST=2018-10-26",
+                "-ND=2018-11-29",
+                "-ED=2018-11-29",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
