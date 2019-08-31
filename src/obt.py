@@ -20,7 +20,7 @@ class obt(object):
     def __init__(self):
         try:
             start_logger()
-            self.db = hdf5db(r"D:/Work/GitHub/hdf5db/indexdb.hdf")
+            self.db = hdf5db.from_path(r"D:/Work/GitHub/hdf5db/indexdb.hdf")
             self.spot = None
             self._symbol = None
             """ Where the module is located """
@@ -40,10 +40,8 @@ class obt(object):
             self.ODF = None
             """ Max repair iterations """
             self.MITR = 5
-            """ Repair adjustment factor """
-            self.RAF = 2
-            """ Rapair adjustment trigger """
-            self.RAT = 2
+            """ Strangle or straddle adjustment factor """
+            self.SSAF = 2
         except Exception as e:
             print_exception(e)
 
@@ -154,15 +152,14 @@ class obt(object):
         df = self.calculate_repaired_pnl(df, tp)
         return df
 
-    @staticmethod
-    def calculate_repaired_pnl(df, tp):
+    def calculate_repaired_pnl(self, df, tp):
         df = df.assign(TP=tp)
         df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
         df = df.assign(WIDTH=df.CS - df.PS)
         df = df.assign(UBK=df.CS + tp)
         df = df.assign(LBK=df.PS - tp)
-        df = df.assign(CBK=df.CS + df["CALL_CLOSE"].iloc[0])
-        df = df.assign(PBK=df.PS - df["PUT_CLOSE"].iloc[0])
+        df = df.assign(CBK=df.CS + (tp * self.SSAF))
+        df = df.assign(PBK=df.PS - (tp * self.SSAF))
         df = df.assign(UW=df.CS - df.SPOT)
         df = df.assign(LW=df.SPOT - df.PS)
         df = df.assign(WR=df.UW / df.LW)
@@ -180,7 +177,7 @@ class obt(object):
             print(f"Stopping repair iteration since max iteration done...")
             return df
         # Repair adjustment trigger
-        rat = price * self.RAT
+        rat = price * self.SGLRAF
         dfs = df.query("PUT_CLOSE>=@rat or CALL_CLOSE>=@rat")
         if len(dfs) <= 1:
             print("No repair required...")
@@ -235,37 +232,26 @@ class obt(object):
     def repair_straddle(self, df, itr):
         """ Repairs a straddle position
         """
-        print(f"Repair iteraion ({itr}) : date {df.index[0]:%Y-%m-%d}")
+        print(f"Repair iteraion ({itr}) : date {self.ST:%Y-%m-%d}")
         if itr > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
             return df
         # dfloc
         sdf = df[self.ST:]
         dfk = sdf.iloc[0]
-        ubk = dfk.UBK * 0.75
-        lbk = dfk.LBK * 1.25
-        # dfs = sdf.query("SPOT>@dfk.CBK or SPOT<@dfk.PBK")
-        dfs = sdf.query("SPOT>@ubk or SPOT<@lbk")
-        if len(dfs) == 0:
-            print(f"No adjustment required...")
+        dfs = sdf.query("SPOT>@dfk.CBK or SPOT<@dfk.PBK")
+        dfsl = len(dfs)
+        if dfsl == 0:
+            print(f"Not adjusting any further position in control...")
             return df
-        dfii = dfs.iloc[0]
-        # Calculate adjustment profit and loss
-        if dfii.SPOT < dfii.PBK:
-            print("Put adjustment")
-            # Adjustment loss
-            adl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
-            # Adjustment proift
-            adp = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-        elif dfii.SPOT > dfii.CBK:
-            print("Call adjustment")
-            # Adjustment loss
-            adl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-            # Adjustment proift
-            adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
         else:
-            raise Exception("Unknown issue don't know what to adjust")
-        self.ST = dfii.name
+            dfii = dfs.iloc[0]
+            self.ST = dfii.name
+            dfr = df[self.ST:]
+            dfrl = len(dfr)
+            if dfrl <= 5:
+                print(f"Not adjusting any further days to expiry is less than ({dfrl})...")
+                return df  
         atm = self.get_atm_strike()
         # Adjust Call
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm.STRIKE_PR)
@@ -277,7 +263,9 @@ class obt(object):
         df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
         # Calculate new target profit
         tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
-        tp = tpl.sum() + adl + adp
+        adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
+        adc = dfk.CALL_CLOSE - dfii.CALL_CLOSE
+        tp = tpl.sum() + adp + adc
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
@@ -291,7 +279,7 @@ class obt(object):
             st = self.ST
             nd = self.ND
             expd = self.ED
-            print("Building strangle", end=",")
+            print("Building position", end=",")
             print(f" Start : {st:%Y-%m-%d}", end=",")
             print(f" End : {nd:%Y-%m-%d}", end=",")
             print(f" Expiry : {expd:%Y-%m-%d}", end=",")
@@ -515,6 +503,7 @@ class obt(object):
         #
         file_name = (
             f"{self.symbol}_STR_{num_expiry}_"
+            f"_{self.SSAF:.2f}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
@@ -528,7 +517,7 @@ class obt(object):
                 self.ED = x.ED
                 atm = self.get_atm_strike()
                 sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
-                rdf = self.repair_strangle(sdf, atm.PR, 1)
+                rdf = self.repair_straddle(sdf, 1)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", file_name, index=x.Index)
                 smry.append(sdf.iloc[-1])
             except Exception as e:
@@ -549,15 +538,10 @@ class obt(object):
         self.ND = conf["ND"]
         self.ED = conf["ED"]
         sdf = self.build_ss(conf["STRIKE"], conf["STRIKE"], conf["CPR"], conf["PPR"])
-        if (conf["CPR"] is not None) and (conf["PPR"] is not None):
-            price = (conf["CPR"] + conf["PPR"]) / 2
-        else:
-            price = sdf["TP"].iloc[0] / 2
-        rdf = self.repair_strangle(sdf, price, 1)
+        rdf = self.repair_straddle(sdf, 1)
         file_name = (
             f"{self.symbol}_SSR_custom_"
             f"{self.ED:%Y-%b-%d}"
-            f"price_{price:.2f}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)

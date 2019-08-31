@@ -10,32 +10,74 @@ from src import dutil
 
 
 class hdf5db(object):
-    def __init__(self, pth, symbol, instrument):
-        self.symbol = symbol.upper()
-        self.instrument = instrument.upper()
-        self.set_db(pth)
-
     def __init__(self):
+        self._symbol = None
+        self._instrument = None
+        self._path = None
         pass
 
-    def __init__(self, pth):
-        self.set_db(pth)
+    @classmethod
+    def get_instance(cls):
+        return cls()
+
+    @classmethod
+    def from_path_symbol_instrument(cls, pth, symbol, instrument):
+        db = cls()
+        db.path = pth
+        db.symbol = symbol
+        db.instrument = instrument
+        return db
+
+    @classmethod
+    def from_path(cls, pth):
+        db = cls()
+        db.path = pth
+        return db
+
+    @property
+    def symbol(self):
+        """symbol to be processed"""
+        if self._symbol is None:
+            raise Exception("Symbol is not yet set.")
+        else:
+            return self._symbol
+
+    @symbol.setter
+    def symbol(self, value):
+        self._symbol = value.upper()
+
+    @property
+    def instrument(self):
+        """instrument to be processed"""
+        if self._instrument is None:
+            raise Exception("Symbol is not yet set.")
+        else:
+            return self._instrument
+
+    @instrument.setter
+    def instrument(self, value):
+        self._instrument = value.upper()
 
     def set_symbol_instrument(self, symbol, instrument):
         self.symbol = symbol
         self.instrument = instrument
 
-    def set_db(self, dbpath):
-        try:
-            if dbpath is not None:
-                if os.path.exists(dbpath):
-                    self.dbpath = dbpath
-                else:
-                    print(f"Unable to find given db in path {dbpath}")
+    @property
+    def path(self):
+        if self._path is None:
+            raise Exception("DB path has not been set.")
+        else:
+            return self._path
+    
+    @path.setter
+    def path(self, value):
+        if value is not None:
+            if os.path.exists(value):
+                self._path = value
             else:
-                print("Given dbpath is none...")
-        except Exception as e:
-            print_exception(e)
+                raise Exception(f"Unable to find given db in path {value}")
+        else:
+            raise Exception("Given dbpath is none...")
 
     def get_past_n_expiry_dates(self, n, instrument=None):
         try:
@@ -46,7 +88,7 @@ class hdf5db(object):
                 i = instrument
             cd = dutil.get_current_date()
             df = pd.read_hdf(
-                self.dbpath,
+                self.path,
                 "fno",
                 where="SYMBOL==s and INSTRUMENT==i and EXPIRY_DT<=cd",
                 columns=["EXPIRY_DT"],
@@ -62,7 +104,7 @@ class hdf5db(object):
             i = self.instrument
             cd = dutil.get_current_date()
             df = pd.read_hdf(
-                self.dbpath,
+                self.path,
                 "fno",
                 where="SYMBOL==s and INSTRUMENT==i and EXPIRY_DT>=cd",
                 columns=["EXPIRY_DT"],
@@ -78,7 +120,7 @@ class hdf5db(object):
             i = self.instrument
             ed = dutil.process_date(date)
             st = ed - timedelta(days=5)
-            dbp = self.dbpath
+            dbp = self.path
             df = pd.read_hdf(
                 dbp,
                 "fno",
@@ -100,7 +142,7 @@ class hdf5db(object):
             s = self.symbol
             std = dutil.process_date(st)
             ndd = dutil.process_date(nd)
-            dbp = self.dbpath
+            dbp = self.path
             df = pd.read_hdf(
                 dbp, "idx", where="SYMBOL==s and TIMESTAMP>=std and TIMESTAMP<=ndd"
             ).sort_values("TIMESTAMP")
@@ -129,7 +171,7 @@ class hdf5db(object):
             st = dutil.process_date(st)
             nd = dutil.process_date(nd)
             expd = dutil.process_date(expd)
-            dbp = self.dbpath
+            dbp = self.path
             rule = (
                 "SYMBOL==s and "
                 "INSTRUMENT==i and "
@@ -139,9 +181,22 @@ class hdf5db(object):
                 "STRIKE_PR==strike and "
                 "EXPIRY_DT==expd"
             )
-            df = pd.read_hdf(
-                dbp, "fno", where=rule, columns=["TIMESTAMP", "CLOSE", "OPEN_INT", "CHG_IN_OI", "STRIKE_PR"], 
-            ).set_index("TIMESTAMP").sort_index()
+            df = (
+                pd.read_hdf(
+                    dbp,
+                    "fno",
+                    where=rule,
+                    columns=[
+                        "TIMESTAMP",
+                        "CLOSE",
+                        "OPEN_INT",
+                        "CHG_IN_OI",
+                        "STRIKE_PR",
+                    ],
+                )
+                .set_index("TIMESTAMP")
+                .sort_index()
+            )
             df = df.drop_duplicates()
             return df
         except Exception as e:
@@ -159,7 +214,7 @@ class hdf5db(object):
             st = dutil.process_date(st)
             nd = dutil.process_date(nd)
             expd = dutil.process_date(expd)
-            dbp = self.dbpath
+            dbp = self.path
             rule = (
                 "SYMBOL==s and "
                 "INSTRUMENT==i and "
