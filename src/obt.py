@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from src.columns import STRANGLE_COLUMNS
+from src.columns import POSITION_COLUMNS
 from src.dutil import get_current_date, last_TH_of_months_between_dates, process_date
 from src.excel_util import add_style, create_summary_sheet, create_worksheet
 from src.hdf5db import hdf5db
@@ -42,6 +42,8 @@ class obt(object):
             self.MITR = 5
             """ Strangle or straddle adjustment factor """
             self.SSAF = 2
+            """ No adjustment if the number of days to expiry is less than NOAD """
+            self.NOAD = 5
         except Exception as e:
             print_exception(e)
 
@@ -172,34 +174,44 @@ class obt(object):
         the price.
         Do the repair only when any one of the leg is in loss.
         """
-        print(f"Repair iteraion ({itr}) : price = {price:.2f}")
+        print(
+            f"Repair iteraion ({itr}) : price = {price:.2f} : date {self.ST:%Y-%m-%d}"
+        )
         if itr > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
             return df
+        sdf = df[self.ST :]
+        dfk = sdf.iloc[0]
         # Repair adjustment trigger
-        rat = price * self.SGLRAF
-        dfs = df.query("PUT_CLOSE>=@rat or CALL_CLOSE>=@rat")
-        if len(dfs) <= 1:
-            print("No repair required...")
+        rat = price * self.SSAF
+        dfs = sdf.query("PUT_CLOSE>=@rat or CALL_CLOSE>=@rat")
+        if len(dfs) == 0:
+            print(f"Not adjusting any further position in control...")
             return df
+        else:
+            dfii = dfs.iloc[0]
+            self.ST = dfii.name
+            dfr = df[self.ST :]
+            if len(dfr) <= self.NOAD:
+                print("No repair required...")
+                return df
         #
-        dfii = dfs.iloc[0]
         # Calculate adjustment profit and loss
         if dfii.PUT_CLOSE >= rat:
             print("Put adjustment")
             # Adjustment loss
-            adl = df.iloc[0].PUT_CLOSE - dfii.PUT_CLOSE
+            adl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
             # Adjustment proift
-            adp = df.iloc[0].CALL_CLOSE - dfii.CALL_CLOSE
+            adp = dfk.CALL_CLOSE - dfii.CALL_CLOSE
             # New price to be adjusted for
             call_price = rat  # Move call twice the price
             put_price = price  # Move put for the same price
         elif dfii.CALL_CLOSE >= rat:
             print("Call adjustment")
             # Adjustment loss
-            adl = df.iloc[0].CALL_CLOSE - dfii.CALL_CLOSE
+            adl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
             # Adjustment proift
-            adp = df.iloc[0].PUT_CLOSE - dfii.PUT_CLOSE
+            adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
             # New price to be adjusted for
             call_price = price  # Move call for same price
             put_price = rat  # Move put for twice the price
@@ -227,6 +239,7 @@ class obt(object):
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
+        df.loc[fno.index, "ADN"] = itr
         return self.repair_strangle(df, rat, itr + 1)
 
     def repair_straddle(self, df, itr):
@@ -240,18 +253,18 @@ class obt(object):
         sdf = df[self.ST:]
         dfk = sdf.iloc[0]
         dfs = sdf.query("SPOT>@dfk.CBK or SPOT<@dfk.PBK")
-        dfsl = len(dfs)
-        if dfsl == 0:
+        if len(dfs) == 0:
             print(f"Not adjusting any further position in control...")
             return df
         else:
             dfii = dfs.iloc[0]
             self.ST = dfii.name
-            dfr = df[self.ST:]
-            dfrl = len(dfr)
-            if dfrl <= 5:
-                print(f"Not adjusting any further days to expiry is less than ({dfrl})...")
-                return df  
+            dfr = df[self.ST :]
+            if len(dfr) <= self.NOAD:
+                print(
+                    f"Not adjusting any further days to expiry is less than ({len(dfr)})..."
+                )
+                return df
         atm = self.get_atm_strike()
         # Adjust Call
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm.STRIKE_PR)
@@ -269,6 +282,7 @@ class obt(object):
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
+        df.loc[fno.index, "ADN"] = itr
         return self.repair_straddle(df, itr + 1)
 
     def build_ss(self, cs, ps, cpr=None, ppr=None):
@@ -292,8 +306,8 @@ class obt(object):
             fnocs = self.rename_call_columns(fnocs)
             fnops = self.db.get_strike_price(st, nd, expd, "PE", ps)
             fnops = self.rename_put_columns(fnops)
-            spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE":"SPOT"})
-            df = spt.join([fnocs, fnops])
+            spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE": "SPOT"})
+            df = spt.join([fnocs, fnops], how="outer")
             # call starting price
             if cpr is not None:
                 df["CALL_CLOSE"].iat[0] = cpr
@@ -306,12 +320,11 @@ class obt(object):
             tp = csp + psp
             df = df.assign(TP=tp)
             df = df.assign(ITP=tp)
-            df = df.assign(
-                PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1)
-            )
+            df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
             df = df.assign(ED=expd)
+            df = df.assign(ADN=0)
             df = self.calculate_pnl(df)
-            return df[STRANGLE_COLUMNS]
+            return df[POSITION_COLUMNS]
         except Exception as e:
             print_exception(e)
             return None
@@ -412,9 +425,10 @@ class obt(object):
         expd = self.get_expiry_df(num_expiry, exp_month)
         #
         file_name = (
-            f"{self.symbol}_SSG_{num_expiry}_"
-            f"price_{price}_"
-            f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
+            f"{self.symbol}_SSG_{num_expiry}"
+            f"_price_{price}"
+            f"_{self.SSAF}"
+            f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
         ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
@@ -502,9 +516,10 @@ class obt(object):
         expd = self.get_expiry_df(num_expiry, exp_month)
         #
         file_name = (
-            f"{self.symbol}_STR_{num_expiry}_"
-            f"_{self.SSAF:.2f}_"
-            f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
+            f"{self.symbol}_STR_{num_expiry}"
+            f"_{self.SSAF:.2f}"
+            f"_{self.NOAD}"
+            f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
         ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")

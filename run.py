@@ -10,14 +10,16 @@ from src.obt import obt
 @click.option("-symbol", default="NIFTY")
 @click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
 @click.option("-ssaf", help="Strangle or straddle adjustment factor", default=2.0)
+@click.option("-noad", help="No adjustment if num days to expiry is less than noad", default=5)
 @click.pass_context
-def cli(ctx, symbol, mitr, ssaf):
+def cli(ctx, symbol, mitr, ssaf, noad):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
     ob.symbol = symbol
     ob.MITR = mitr
     ob.SSAF = ssaf
+    ob.NOAD = noad
     ctx.obj["OBT"] = ob
 
 
@@ -46,7 +48,7 @@ def stg(ctx, nexp, which_month, price):
 @click.option("-ND", help="End date", default=None)
 @click.option("-ED", help="Expiry date", default=None)
 @click.option("-price", help="what price strangle needs to be created", default=50)
-def sstg(ctx, st, nd, ed, price, mitr):
+def sstg(ctx, st, nd, ed, price):
     """ Run strangle """
     ctx.obj["ST"] = st
     ctx.obj["ND"] = nd
@@ -54,7 +56,6 @@ def sstg(ctx, st, nd, ed, price, mitr):
     ctx.obj["PR"] = price
     print(ctx.obj)
     ob = ctx.obj["OBT"]
-    ob.MITR = mitr
     ob.e2e_SSG_SE_by_price(st, nd, ed, price)
 
 

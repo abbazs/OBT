@@ -1,4 +1,4 @@
-STRANGLE_COLUMNS = [
+POSITION_COLUMNS = [
     "ED",
     "SYMBOL",
     "COI",
@@ -22,4 +22,5 @@ STRANGLE_COLUMNS = [
     "UW", # Upper width
     "WR", # Ratio of upper and lower width
     "ITP", # Initial target profit
+    "ADN", # Adjustment number
 ]

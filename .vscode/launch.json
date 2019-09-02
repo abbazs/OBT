@@ -11,11 +11,13 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}\\run.py",
             "args": [
+                "-ssaf=3",
+                "-symbol=banknifty",
                 "sstg",
-                "-ST=2019-04-26",
-                "-ND=2019-05-30",
-                "-ED=2019-05-30",
-                "-price=50"
+                "-ST=2019-03-01",
+                "-ND=2019-03-28",
+                "-ED=2019-03-28",
+                "-price=100"
             ],
             "console": "integratedTerminal"
         },
