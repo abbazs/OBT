@@ -249,6 +249,13 @@ class obt(object):
         if itr > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
             return df
+        # Do not adjust if last adjustment is less than NOAD
+        adns = df[:self.ST]["ADN"].unique()
+        adn = adns[-1]
+        adnl = len(df[:self.ST].query("ADN==@adn"))
+        if adnl <= self.NOAD:
+            nmov = self.NOAD - adnl
+            self.ST = df[self.ST:].index[nmov]
         # dfloc
         sdf = df[self.ST:]
         dfk = sdf.iloc[0]
@@ -259,7 +266,7 @@ class obt(object):
         else:
             dfii = dfs.iloc[0]
             self.ST = dfii.name
-            dfr = df[self.ST :]
+            dfr = df[self.ST:]
             if len(dfr) <= self.NOAD:
                 print(
                     f"Not adjusting any further days to expiry is less than ({len(dfr)})..."
@@ -576,6 +583,8 @@ class obt(object):
         self.ED = ed
         atm = self.get_atm_strike()
         sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
+        # Do not adjust before number of days
+        self.ST = sdf.index[self.NOAD]
         rdf = self.repair_straddle(sdf, 1)
         file_name = (
             f"{self.symbol}_SSG_"

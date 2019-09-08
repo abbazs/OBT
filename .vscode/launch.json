@@ -22,16 +22,19 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python: run.py ssrs",
+            "name": "Python: run.py ssrs bn",
             "type": "python",
             "request": "launch",
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}\\run.py",
             "args": [
+                "-noad=3",
+                "-symbol=banknifty",
+                "-ssaf=0.7",
                 "ssrs",
-                "-ST=2018-10-26",
-                "-ND=2018-11-29",
-                "-ED=2018-11-29",
+                "-ST=2019-07-26",
+                "-ND=2019-08-29",
+                "-ED=2019-08-29",
             ],
             "console": "integratedTerminal"
         },
