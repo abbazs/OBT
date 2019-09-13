@@ -1,0 +1,109 @@
+{
+    "position": {
+        "NAME": "A USER GIVEN NAME",
+        "ST": "DATE",
+        "ND": "DATE",
+        "SYMBOL": "SYMBOL",
+        "pee": {
+            "VIX": {
+                "ENTRY": 0.0,
+                "EXIT": 0.0
+            },
+            "IV": {
+                "ENTRY": 0.0,
+                "EXIT": 0.0
+            },
+            "SPOT": {
+                "ENTRY": 0.0,
+                "EXIT": 0.0
+            }
+        },
+        "legs": [
+            {
+                "leg": {
+                    "PT": "position",
+                    "ST": "START DATE",
+                    "ND": "END DATE",
+                    "ED": "EXPIRY DATE",
+                    "SYMBOL": "SYMBOL",
+                    "STRIKE": "STRIKE",
+                    "EES": {
+                        "VIX": {
+                            "ENTRY": "",
+                            "EXIT": ""
+                        },
+                        "IV": {
+                            "ENTRY": "",
+                            "EXIT": ""
+                        },
+                        "GREEK": {
+                            "VOL": {
+                                "ENTRY": "VOLATILITY AT ENTRY",
+                                "EXIT": "VOLATILITY AT EXTI"
+                            },
+                            "THETA": {
+                                "ENTRY": "THETA AT ENTRY",
+                                "EXIT": "THETA AT EXTI"
+                            },
+                            "DELTA": {
+                                "ENTRY": "DELTA AT ENTRY",
+                                "EXIT": "DELTA AT EXTI"
+                            },
+                            "GAMMA": {
+                                "ENTRY": "GAMMA AT ENTRY",
+                                "EXIT": "GAMMA AT EXTI"
+                            },
+                            "VEGA": {
+                                "ENTRY": "VEGA AT ENTRY",
+                                "EXIT": "VEGA AT EXTI"
+                            }
+                        },
+                        "PRICE": {
+                            "ENTRY": "",
+                            "EXIT": ""
+                        }
+                    },
+                    "INSTRUMENT": "FUT OR OPT",
+                    "TT": "TRADE TYPE - LONG OR SHORT",
+                    "HISTORY": [
+                        {
+                            "DATE": "",
+                            "EE": {
+                                "VIX": {
+                                    "ENTRY": "",
+                                    "EXIT": ""
+                                },
+                                "IV": {
+                                    "ENTRY": "",
+                                    "EXIT": ""
+                                },
+                                "GREEK": {
+                                    "VOL": {
+                                        "ENTRY": "VOLATILITY AT ENTRY",
+                                        "EXIT": "VOLATILITY AT EXTI"
+                                    },
+                                    "THETA": {
+                                        "ENTRY": "THETA AT ENTRY",
+                                        "EXIT": "THETA AT EXTI"
+                                    },
+                                    "GAMMA": {
+                                        "ENTRY": "GAMMA AT ENTRY",
+                                        "EXIT": "GAMMA AT EXTI"
+                                    },
+                                    "VEGA": {
+                                        "ENTRY": "VEGA AT ENTRY",
+                                        "EXIT": "VEGA AT EXTI"
+                                    }
+                                },
+                                "PRICE": {
+                                    "ENTRY": "",
+                                    "EXIT": ""
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
