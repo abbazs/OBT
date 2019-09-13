@@ -15,9 +15,6 @@
                 "end_date": {
                     "type": "integer"
                 },
-                "expiry_date": {
-                    "type": "integer"
-                },
                 "symbol": {
                     "type": "string"
                 },
@@ -33,12 +30,8 @@
             },
             "required": [
                 "name",
-                "expiry_date",
-                "end_date",
                 "start_date",
-                "symbol",
-                "position_entry_exits",
-                "legs"
+                "symbol"
             ],
             "title": "position"
         },
@@ -53,8 +46,7 @@
                     "type": "number"
                 }
             },
-            "required": [
-            ],
+            "required": [],
             "title": "EntryAndExit"
         },
         "pee": {
@@ -67,13 +59,13 @@
                 "iv": {
                     "$ref": "#/definitions/ee"
                 },
-                "SPOT": {
+                "spot": {
                     "$ref": "#/definitions/ee"
                 }
             },
             "required": [
                 "iv",
-                "SPOT",
+                "spot",
                 "vix"
             ],
             "title": "PositionEntryExit"
@@ -98,13 +90,7 @@
                     "$ref": "#/definitions/ee"
                 }
             },
-            "required": [
-                "delta",
-                "gamma",
-                "theta",
-                "vega",
-                "vol"
-            ],
+            "required": [],
             "title": "greek"
         },
         "ees": {
@@ -125,8 +111,6 @@
                 }
             },
             "required": [
-                "greek",
-                "iv",
                 "price",
                 "vix"
             ],
@@ -168,7 +152,6 @@
                 "expiry_date",
                 "entry_and_exits",
                 "instrument",
-                "end_date",
                 "parent",
                 "start_date",
                 "strike",
