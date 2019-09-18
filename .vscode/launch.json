@@ -54,6 +54,20 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Python: run.py sep",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}\\run.py",
+            "args": [
+                "-mitr=5",
+                "-ssaf=0.8",
+                "sstgc",
+                "-name=sstgfc_sep1.json"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",

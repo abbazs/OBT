@@ -9,7 +9,7 @@ from src.obt import obt
 @click.group()
 @click.option("-symbol", default="NIFTY")
 @click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
-@click.option("-ssaf", help="Strangle or straddle adjustment factor", default=2.0)
+@click.option("-ssaf", help="Strangle or straddle adjustment factor", default=0.01)
 @click.option("-noad", help="No adjustment if num days to expiry is less than noad", default=5)
 @click.pass_context
 def cli(ctx, symbol, mitr, ssaf, noad):

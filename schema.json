@@ -9,12 +9,6 @@
                 "name": {
                     "type": "string"
                 },
-                "start_date": {
-                    "type": "integer"
-                },
-                "end_date": {
-                    "type": "integer"
-                },
                 "symbol": {
                     "type": "string"
                 },
@@ -40,10 +34,20 @@
             "additionalProperties": false,
             "properties": {
                 "ENTRY": {
-                    "type": "number"
+                    "price": {
+                        "type": "number"
+                    },
+                    "date": {
+                        "type": "integer"
+                    }
                 },
                 "EXIT": {
-                    "type": "number"
+                    "price": {
+                        "type": "number"
+                    },
+                    "date": {
+                        "type": "integer"
+                    }
                 }
             },
             "required": [],
