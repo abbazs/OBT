@@ -1,4 +1,4 @@
-python run.py -mitr=3 -ssaf=0.8 sstgc -name=sstgfc_nov1.json
-python run.py -mitr=3 -ssaf=0.8 sstgc -name=sstgfc_nov2.json
-python run.py -mitr=3 -ssaf=0.8 sstgc -name=sstgfc_nov3.json
+python run.py -mitr=3 -ssaf=0.95 -noad=1 sstgc -name=nov_ssrc1.json
+python run.py -mitr=3 -ssaf=0.95 -noad=1 sstgc -name=nov_sstgc2.json
+python run.py -mitr=3 -ssaf=0.95 -noad=1 sstgc -name=nov_sstgc3.json
 

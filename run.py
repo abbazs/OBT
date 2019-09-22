@@ -27,17 +27,18 @@ def cli(ctx, symbol, mitr, ssaf, noad):
 @click.pass_context
 @click.option("-nexp", help="Number of expiries.", default=60)
 @click.option(
-    "-which_month", help="1 - current month, 2 - next month, 3 - far month", default=1
+    "-month", help="1 - current month, 2 - next month, 3 - far month", default=1
 )
 @click.option("-price", help="what price strangle needs to be created", default=50)
-def stg(ctx, nexp, which_month, price):
+def stg(ctx, nexp, month, price):
     """ Run strangle """
     ctx.obj["NEXP"] = nexp
-    ctx.obj["WM"] = which_month
+    ctx.obj["WM"] = month
     ctx.obj["PR"] = price
     print(ctx.obj)
     ob = ctx.obj["OBT"]
-    ob.e2e_SSG_by_price(nexp, price, which_month)
+    ob.MONTH = month
+    ob.e2e_SSG_by_price(nexp, price)
 
 
 @cli.command(
@@ -121,7 +122,8 @@ def sstgc(ctx, name):
 def ssr(ctx, nexp, month):
     """ Run straddle """
     ob = ctx.obj["OBT"]
-    ob.e2e_SSR(nexp, month)
+    ob.MONTH = month
+    ob.e2e_SSR(nexp)
 
 
 @cli.command(help="Study straddles for start, end and expiry days")
@@ -134,6 +136,29 @@ def ssrs(ctx, st, nd, ed):
     ob = ctx.obj["OBT"]
     ob.e2e_SSR_SE(st, nd, ed)
 
+@cli.command(
+    help=(
+        "Study custom straddle for a given start date, end date, expiry date, "
+        "call strike, put strike, call price, put price "
+        "- input in a json file"
+    )
+)
+@click.pass_context
+@click.option("-name", help="File name", default=None)
+def ssrc(ctx, name):
+    """ Run straddle """
+    with open(name, "r") as f:
+        conf = json.loads(f.read())
+    ctx.obj["ST"] = conf["ST"]
+    ctx.obj["ND"] = conf["ND"]
+    ctx.obj["ED"] = conf["ED"]
+    ctx.obj["CS"] = conf["CS"]
+    ctx.obj["PS"] = conf["PS"]
+    ctx.obj["CPR"] = conf["CPR"]
+    ctx.obj["PPR"] = conf["PPR"]
+    print(ctx.obj)
+    ob = ctx.obj["OBT"]
+    ob.e2e_SSR_SE_custom(conf)
 
 if __name__ == "__main__":
     cli(obj={})

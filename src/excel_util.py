@@ -48,6 +48,11 @@ def create_summary_sheet(ew, df, file_name):
     ws.column_dimensions["A"].width = 11
     ws.column_dimensions["B"].width = 11
 
+def create_inputsheet(ew, df):
+    df.to_excel(excel_writer=ew, sheet_name="INPUTS")
+    ws = ew.book["INPUTS"]
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 20
 
 def add_style(ew):
     ns = NamedStyle(name="custom_datetime", number_format="YYYY-MM-DD")

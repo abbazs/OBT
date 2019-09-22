@@ -11,7 +11,12 @@ import pandas as pd
 
 from src.columns import POSITION_COLUMNS
 from src.dutil import get_current_date, last_TH_of_months_between_dates, process_date
-from src.excel_util import add_style, create_summary_sheet, create_worksheet
+from src.excel_util import (
+    add_style,
+    create_summary_sheet,
+    create_worksheet,
+    create_inputsheet,
+)
 from src.hdf5db import hdf5db
 from src.log import print_exception, start_logger
 
@@ -22,7 +27,8 @@ class obt(object):
             start_logger()
             self.db = hdf5db.from_path(r"D:/Work/GitHub/hdf5db/indexdb.hdf")
             self.spot = None
-            self._symbol = None
+            """ Symbol to be tested """
+            self._SYMBOL = None
             """ Where the module is located """
             self.module_path = os.path.abspath(__file__)
             """ Folder of the module """
@@ -44,6 +50,10 @@ class obt(object):
             self._SSAF = None
             """ No adjustment if the number of days to expiry is less than NOAD """
             self._NOAD = 5
+            """ Which month, current, next or far? """
+            self._MONTH = None
+            """ Number of days before expiry """
+            self._NDAYS = None
         except Exception as e:
             print_exception(e)
 
@@ -84,17 +94,43 @@ class obt(object):
         self._NOAD = value
 
     @property
-    def symbol(self):
+    def MONTH(self):
+        """ Which month, current, next or far? """
+        if self._MONTH is None:
+            raise Exception("Month to process has not been set.")
+        else:
+            return self._MONTH
+
+    @MONTH.setter
+    def MONTH(self, value):
+        self._MONTH = value
+
+    @property
+    def NDAYS(self):
+        """ Number of days to ahead of expiry to process """
+        if self._NDAYS is None:
+            raise Exception(
+                "Number of days to ahead of expiry to process has not been set."
+            )
+        else:
+            return self._NDAYS
+
+    @NDAYS.setter
+    def NDAYS(self, value):
+        self._NDAYS = value
+
+    @property
+    def SYMBOL(self):
         """symbol to be processed"""
-        if self._symbol is None:
+        if self._SYMBOL is None:
             raise Exception("Symbol is not yet set.")
         else:
-            return self._symbol
+            return self._SYMBOL
 
-    @symbol.setter
-    def symbol(self, value):
-        self._symbol = value.upper()
-        self.db.set_symbol_instrument(self.symbol, "OPTIDX")
+    @SYMBOL.setter
+    def SYMBOL(self, value):
+        self._SYMBOL = value.upper()
+        self.db.set_symbol_instrument(self.SYMBOL, "OPTIDX")
 
     @property
     def ST(self):
@@ -132,14 +168,39 @@ class obt(object):
     def ED(self, value):
         self._ED = process_date(value)
 
-    def get_expiry_df(self, ne, em):
+    def save_inputs_to_excel(self, ewb):
+        df = pd.DataFrame(
+            {
+                "SYMBOL": self.SYMBOL,
+                "MONTH": self._MONTH,
+                "NDAYS": self._NDAYS,
+                "NO_ADJUSTMENT_DAYS": self.NOAD,
+                "MAX_NUMBER_OF_ADJUSTMENTS": self.MITR,
+                "ADJUSTMENT_FACTOR": self.SSAF,
+            },
+            index=[0],
+        )
+        create_inputsheet(ewb, df.T)
+
+    def get_expiry_df(self, num_expiry):
+        """
+        Gets expiry dates for number of expirys required.
+        -------------------------------------------------
+        Parameters
+        ----------
+        num_expiry -> (int) number of expirys required
+        -------------------------------------------------
+        Returns
+        -------
+        retun -> (pandas.DataFrame) a dataframe containing start date, end date and expiry dates
+        """
         # Get expiry dates
         # ST - START DATE
         # ED - EXPIRY DATE
         # ND - END DATE
-        expd = self.db.get_past_n_expiry_dates(ne, "FUTIDX")
+        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUTIDX")
         expd = expd.rename(columns={"EXPIRY_DT": "ED"})
-        expd = expd.assign(ST=expd.shift(em) + pd.Timedelta("1Day"))
+        expd = expd.assign(ST=expd.shift(self.MONTH) + pd.Timedelta("1Day"))
         expd = expd.assign(ND=expd["ED"])
         expd = expd.dropna().reset_index(drop=True)
         return expd
@@ -193,9 +254,9 @@ class obt(object):
     def calculate_repaired_pnl(self, df, tp):
         df = df.assign(TP=tp)
         df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
-        df = df.assign(WIDTH=df.CS - df.PS)
         df = df.assign(UBK=df.CS + tp)
         df = df.assign(LBK=df.PS - tp)
+        df = df.assign(WIDTH=df.UBK - df.LBK)
         df = df.assign(CBK=df.CS + (tp * self.SSAF))
         df = df.assign(PBK=df.PS - (tp * self.SSAF))
         df = df.assign(UW=df.CS - df.SPOT)
@@ -203,88 +264,13 @@ class obt(object):
         df = df.assign(WR=df.UW / df.LW)
         return df
 
-    def repair_position_by_price(self, df, price, itr):
-        """ Repairs a strangle position
-        Which ever leg is in profit, more than 50% of price
-        close it and move to the next strike available at
-        the price.
-        Do the repair only when any one of the leg is in loss.
-        """
-        print(
-            f"Repair iteraion ({itr}) : price = {price:.2f} : date {self.ST:%Y-%m-%d}"
-        )
-        if itr > self.MITR:
-            print(f"Stopping repair iteration since max iteration done...")
-            return df
-        sdf = df[self.ST :]
-        dfk = sdf.iloc[0]
-        # Repair adjustment trigger
-        rat = price * self.SSAF
-        dfs = sdf.query("PUT_CLOSE>=@rat or CALL_CLOSE>=@rat")
-        if len(dfs) == 0:
-            print(f"Not adjusting any further position in control...")
-            return df
-        else:
-            dfii = dfs.iloc[0]
-            self.ST = dfii.name
-            dfr = df[self.ST :]
-            if len(dfr) <= self.NOAD:
-                print("No repair required...")
-                return df
-        #
-        # Calculate adjustment profit and loss
-        if dfii.PUT_CLOSE >= rat:
-            print("Put adjustment")
-            # Adjustment loss
-            adl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
-            # Adjustment proift
-            adp = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-            # New price to be adjusted for
-            call_price = rat  # Move call twice the price
-            put_price = price  # Move put for the same price
-        elif dfii.CALL_CLOSE >= rat:
-            print("Call adjustment")
-            # Adjustment loss
-            adl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-            # Adjustment proift
-            adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
-            # New price to be adjusted for
-            call_price = price  # Move call for same price
-            put_price = rat  # Move put for twice the price
-        else:
-            raise Exception("Unknown issue don't know what to adjust")
-
-        print(f"Adjustment profit {adp:.2f}")
-        print(f"Adjustment loss {adl:.2f}")
-        print(f"New call price {call_price:.2f}")
-        print(f"New put price {put_price:.2f}")
-        dfc = self.db.get_all_strike_data(dfii.name, dfii.name, dfii.ED)
-        # Adjust call
-        cs = self.get_strike_price(dfc, "CE", call_price)
-        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", cs)
-        fno = self.rename_call_columns(fno)
-        df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
-        # Adjust put
-        ps = self.get_strike_price(dfc, "PE", put_price)
-        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", ps)
-        fno = self.rename_put_columns(fno)
-        df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
-        # calculate new target profit
-        tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
-        tp = tpl.sum() + adl + adp
-        #
-        dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
-        df.loc[fno.index] = dfr
-        df.loc[fno.index, "ADN"] = itr
-        return self.repair_position_by_price(df, rat, itr + 1)
-
-    def repair_position_by_straddle(self, df, itr):
-        """ Repairs a straddle position
+    def check_adjustment_required(self, df, itr):
+        """ Checks if adjustment is required for position
         """
         print(f"Repair iteraion ({itr}) : date {self.ST:%Y-%m-%d}")
         if itr > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
-            return df
+            return False
         # Do not adjust if last adjustment is less than NOAD
         adns = df[: self.ST]["ADN"].unique()
         adn = adns[-1]
@@ -294,23 +280,69 @@ class obt(object):
                 self.ST = df[self.ST :].index[self.NOAD]
             else:
                 print(f"Position is in no adjustment period.")
-                return df
+                return False
         # dfloc
         sdf = df[self.ST :]
-        dfk = sdf.iloc[0]
-        dfs = sdf.query("SPOT>@dfk.CBK or SPOT<@dfk.PBK")
+        dfs = sdf.query("SPOT>@sdf.CBK.iloc[0] or SPOT<@sdf.PBK.iloc[0]")
         if len(dfs) == 0:
             print(f"Not adjusting any further position in control...")
-            return df
+            return False
         else:
             dfii = dfs.iloc[0]
-            self.ST = dfii.name
-            dte = self.ED - self.ST
+            dte = self.ED - dfii.name
             if dte.days <= self.NOAD:
                 print(
                     f"Not adjusting any further days to expiry is less than ({dte.days})..."
                 )
-                return df
+                return False
+            else:
+                return dfii
+
+    def repair_position_by_price(self, df, price, itr):
+        """ Repairs a strangle position
+        Which ever leg is in profit, more than 50% of price
+        close it and move to the next strike available at
+        the price.
+        Do the repair only when any one of the leg is in loss.
+        """
+        dfii = self.check_adjustment_required(df, itr)
+        if dfii is False:
+            return df
+        print("Need to adjust")
+        dfk = df[self.ST :].iloc[0]
+        self.ST = dfii.name
+        adp_pnl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
+        adc_pnl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
+        print(f"Adjustment profit {adc_pnl:.2f}")
+        print(f"Adjustment loss {adp_pnl:.2f}")
+        dfc = self.db.get_all_strike_data(dfii.name, dfii.name, dfii.ED)
+        # Adjust call
+        cs = self.get_strike_price(dfc, "CE", price)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", cs)
+        fno = self.rename_call_columns(fno)
+        df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
+        # Adjust put
+        ps = self.get_strike_price(dfc, "PE", price)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", ps)
+        fno = self.rename_put_columns(fno)
+        df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
+        # calculate new target profit
+        tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
+        tp = tpl.sum() + adp_pnl + adc_pnl
+        #
+        dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
+        df.loc[fno.index] = dfr
+        df.loc[fno.index, "ADN"] = itr
+        return self.repair_position_by_price(df, price, itr + 1)
+
+    def repair_position_by_straddle(self, df, itr):
+        """ Repairs a straddle position
+        """
+        dfii = self.check_adjustment_required(df, itr)
+        if dfii is False:
+            return df
+        dfk = df[self.ST :].iloc[0]
+        self.ST = dfii.name
         atm = self.get_atm_strike()
         # Adjust Call
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm.STRIKE_PR)
@@ -370,6 +402,9 @@ class obt(object):
             df = df.assign(ED=expd)
             df = df.assign(ADN=0)
             df = self.calculate_pnl(df)
+            # Sometimes the start date in data frame will not be same as
+            # the given start date
+            self.ST = df.index[0]
             return df[POSITION_COLUMNS]
         except Exception as e:
             print_exception(e)
@@ -457,7 +492,7 @@ class obt(object):
             print_exception(e)
             return None
 
-    def e2e_SSG_by_price(self, num_expiry, price, exp_month=1):
+    def e2e_SSG_by_price(self, num_expiry, price):
         """
         Expiry to expiry strangle creator
         
@@ -468,10 +503,10 @@ class obt(object):
         price : double
             Strangle to be created at which price
         """
-        expd = self.get_expiry_df(num_expiry, exp_month)
+        expd = self.get_expiry_df(num_expiry)
         #
         file_name = (
-            f"{self.symbol}_SSG_{num_expiry}"
+            f"{self.SYMBOL}_SSG_{num_expiry}"
             f"_price_{price}"
             f"_{self.SSAF}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
@@ -494,8 +529,8 @@ class obt(object):
                 print("Error processing last...")
         # save work book
         summary = pd.DataFrame(smry)
-        # summary.to_excel(excel_writer=ewb, sheet_name="SUMMARY")
         create_summary_sheet(ewb, summary, file_name)
+        self.save_inputs_to_excel(ewb)
         ewb.book._sheets.reverse()
         ewb.save()
         print(f"Saved file {full_file_name}")
@@ -509,7 +544,7 @@ class obt(object):
         sdf = self.build_ss_by_price(price)
         rdf = self.repair_position_by_price(sdf, price, 1)
         file_name = (
-            f"{self.symbol}_SSG_"
+            f"{self.SYMBOL}_SSG_"
             f"{self.ED:%Y-%b-%d}"
             f"price_{price}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
@@ -535,10 +570,9 @@ class obt(object):
             price = (conf["CPR"] + conf["PPR"]) / 2
         else:
             price = sdf["TP"].iloc[0] / 2
-        # rdf = self.repair_position_by_price(sdf, price, 1)
-        rdf = self.repair_position_by_straddle(sdf, 1)
+        rdf = self.repair_position_by_price(sdf, price, 1)
         file_name = (
-            f"{self.symbol}_SSG_custom_"
+            f"{self.SYMBOL}_SSG_custom_"
             f"{self.ED:%Y-%b-%d}"
             f"price_{price:.2f}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
@@ -552,7 +586,7 @@ class obt(object):
         self.ODF = sdf
         return sdf
 
-    def e2e_SSR(self, num_expiry, exp_month=1):
+    def e2e_SSR(self, num_expiry):
         """
         Expiry to expiry straddle creator
         
@@ -561,11 +595,12 @@ class obt(object):
         num_expiry : int
             Number of expirys to process
         """
-        expd = self.get_expiry_df(num_expiry, exp_month)
+        expd = self.get_expiry_df(num_expiry)
         #
         file_name = (
-            f"{self.symbol}_STR_{num_expiry}"
+            f"{self.SYMBOL}_SSR_{num_expiry}"
             f"_{self.SSAF:.2f}"
+            f"_{self.MONTH}"
             f"_{self.NOAD}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
@@ -588,8 +623,8 @@ class obt(object):
                 print("Error processing last...")
         # save work book
         summary = pd.DataFrame(smry)
-        # summary.to_excel(excel_writer=ewb, sheet_name="SUMMARY")
         create_summary_sheet(ewb, summary, file_name)
+        self.save_inputs_to_excel(ewb)
         ewb.book._sheets.reverse()
         ewb.save()
         print(f"Saved file {full_file_name}")
@@ -600,10 +635,10 @@ class obt(object):
         self.ST = conf["ST"]
         self.ND = conf["ND"]
         self.ED = conf["ED"]
-        sdf = self.build_ss(conf["STRIKE"], conf["STRIKE"], conf["CPR"], conf["PPR"])
+        sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
         rdf = self.repair_position_by_straddle(sdf, 1)
         file_name = (
-            f"{self.symbol}_SSR_custom_"
+            f"{self.SYMBOL}_SSR_custom_"
             f"{self.ED:%Y-%b-%d}"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
@@ -628,7 +663,7 @@ class obt(object):
         self.ST = sdf.index[self.NOAD]
         rdf = self.repair_position_by_straddle(sdf, 1)
         file_name = (
-            f"{self.symbol}_SSG_"
+            f"{self.SYMBOL}_SSRSE_"
             f"{self.ED:%Y-%b-%d}"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
