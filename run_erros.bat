@@ -1,0 +1,2 @@
+python run.py -mitr=10 -symbol=NIFTY -ssaf=0.95 -noad=1 ssrs -ST=2009-05-16 -ND=2009-07-30 -ED=2009-07-30
+python run.py -mitr=10 -symbol=NIFTY -ssaf=0.95 -noad=1 ssrs -ST=2009may16 -ND=2009may30 -ED=2009may30

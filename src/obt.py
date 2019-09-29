@@ -553,69 +553,6 @@ class obt(object):
             self.print_inputs()
             print_exception(e)
             return None
-    
-    def get_atm_strike1(self):
-        """
-        Returns the atm strike
-        """
-        # start date
-        st = self.ST
-        # end date
-        nd = self.ND
-        ed = self.ED
-        #
-        try:
-            snd = st + timedelta(days=5)
-            df = self.db.get_all_strike_data(st, snd, ed)
-            # Get the first group only
-            stt = df["TIMESTAMP"].unique()[0]
-            try:
-                fdf = self.db.get_future_price(stt, stt, ed)
-                odf = df.assign(ATM=np.abs(fdf.FUTURE.iloc[0] - df.query("TIMESTAMP==@stt").STRIKE_PR))
-                fatm = odf[odf.ATM == odf.ATM.min()].STRIKE_PR.iloc[0]
-            except Exception as e:
-                print("Error getting ATM based on FUTURE price.")
-                print_exception(e)
-                fatm = None
-            try:
-                df = df.query("TIMESTAMP==@stt and OPEN_INT>0 and CHG_IN_OI!=0")
-                opg = df.groupby("OPTION_TYP")
-                opc = opg.get_group("CE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
-                opc = opc[opc.index == opc.index[0]]
-                opp = opg.get_group("PE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
-                opp = opp[opp.index == opp.index[0]]
-                opm = opc.merge(
-                    opp,
-                    how="inner",
-                    left_index=True,
-                    on=["STRIKE_PR"],
-                    suffixes=["_C", "_P"],
-                ).reset_index(drop=True)
-                # Difference between call and put price
-                opm = opm.assign(DIF=(opm["CLOSE_C"] - opm["CLOSE_P"]).abs())
-                # Average price
-                opm = opm.assign(PR=opm[["CLOSE_P", "CLOSE_C"]].mean(axis=1))
-                # Starting day may not be a trading day, hence do this.
-                idx = opm["DIF"].reset_index(drop=True).idxmin()
-                atm = opm[["STRIKE_PR", "CLOSE_P", "CLOSE_C", "PR", "DIF"]].iloc[idx]
-                atm = atm.STRIKE_PR
-            except Exception as e:
-                print("Error getting ATM based on OPTIONS data")
-                print_exception(e)
-                atm = None
-            if atm is None:
-                if fatm is None:
-                    raise Exception("Error getting atm strike!")
-                else:
-                    print("Using FUTURE price based ATM")
-                    atm = fatm
-            print(f"ATM strike price {atm:.0f}")
-            return atm
-        except Exception as e:
-            print("Error getting atm strike ", end="-")
-            self.print_inputs()
-            print_exception(e)
-            return None
 
     def ssg(self, expd, price):
         full_file_name = Path(self.out_path).joinpath(self.OPFN)
