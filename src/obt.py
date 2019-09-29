@@ -54,6 +54,12 @@ class obt(object):
             self._MONTH = None
             """ Number of days before expiry """
             self._NDAYS = None
+            """ Number of expirys to process """
+            self._NDAYS = None
+            """ Output file name """
+            self._OPFN = None
+            """ ATM for the given period """
+            self.ATM = None
         except Exception as e:
             print_exception(e)
 
@@ -120,6 +126,30 @@ class obt(object):
         self._NDAYS = value
 
     @property
+    def NEXP(self):
+        """ Number of expirys to process """
+        if self._NEXP is None:
+            raise Exception("Number of expirys to process has not been set.")
+        else:
+            return self._NEXP
+
+    @NEXP.setter
+    def NEXP(self, value):
+        self._NEXP = value
+
+    @property
+    def OPFN(self):
+        """ Output file name """
+        if self._OPFN is None:
+            raise Exception("Output file name has not been set.")
+        else:
+            return self._OPFN
+
+    @OPFN.setter
+    def OPFN(self, value):
+        self._OPFN = value
+
+    @property
     def SYMBOL(self):
         """symbol to be processed"""
         if self._SYMBOL is None:
@@ -181,6 +211,9 @@ class obt(object):
             index=[0],
         )
         create_inputsheet(ewb, df.T)
+        self.ODF.to_excel(
+            excel_writer=ewb, sheet_name="INPUTS", startrow=0, startcol=4
+        )
 
     def get_expiry_df(self, num_expiry):
         """
@@ -201,6 +234,31 @@ class obt(object):
         expd = self.db.get_past_n_expiry_dates(num_expiry, "FUTIDX")
         expd = expd.rename(columns={"EXPIRY_DT": "ED"})
         expd = expd.assign(ST=expd.shift(self.MONTH) + pd.Timedelta("1Day"))
+        expd = expd.assign(ND=expd["ED"])
+        expd = expd.dropna().reset_index(drop=True)
+        return expd
+
+    def get_expiry_df_before_num_days(self, num_expiry):
+        """
+        Gets expiry dates for number of expirys required.
+        Starting day is set based of number of days before 
+        expiry day
+        -------------------------------------------------
+        Parameters
+        ----------
+        num_expiry -> (int) number of expirys required
+        -------------------------------------------------
+        Returns
+        -------
+        retun -> (pandas.DataFrame) a dataframe containing start date, end date and expiry dates
+        """
+        # Get expiry dates
+        # ST - START DATE
+        # ED - EXPIRY DATE
+        # ND - END DATE
+        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUTIDX")
+        expd = expd.rename(columns={"EXPIRY_DT": "ED"})
+        expd = expd.assign(ST=expd.ED - pd.Timedelta(self.NDAYS, "D"))
         expd = expd.assign(ND=expd["ED"])
         expd = expd.dropna().reset_index(drop=True)
         return expd
@@ -240,6 +298,11 @@ class obt(object):
         sp = df.loc[si]["STRIKE_PR"]
         return sp
 
+    def print_inputs(self):
+        print(f" st='{self.ST:%Y-%m-%d}'", end=",")
+        print(f" nd='{self.ND:%Y-%m-%d}'", end=",")
+        print(f" ed='{self.ED:%Y-%m-%d}'", end=",")
+
     def calculate_pnl(self, df):
         csp = df.iloc[0]["CALL_CLOSE"]
         # put starting price
@@ -259,8 +322,8 @@ class obt(object):
         df = df.assign(WIDTH=df.UBK - df.LBK)
         df = df.assign(CBK=df.CS + (tp * self.SSAF))
         df = df.assign(PBK=df.PS - (tp * self.SSAF))
-        df = df.assign(UW=df.CS - df.SPOT)
-        df = df.assign(LW=df.SPOT - df.PS)
+        df = df.assign(UW=df.CS - df.FUTURE)
+        df = df.assign(LW=df.FUTURE - df.PS)
         df = df.assign(WR=df.UW / df.LW)
         return df
 
@@ -283,7 +346,7 @@ class obt(object):
                 return False
         # dfloc
         sdf = df[self.ST :]
-        dfs = sdf.query("SPOT>@sdf.CBK.iloc[0] or SPOT<@sdf.PBK.iloc[0]")
+        dfs = sdf.query("FUTURE>@sdf.CBK.iloc[0] or FUTURE<@sdf.PBK.iloc[0]")
         if len(dfs) == 0:
             print(f"Not adjusting any further position in control...")
             return False
@@ -345,11 +408,11 @@ class obt(object):
         self.ST = dfii.name
         atm = self.get_atm_strike()
         # Adjust Call
-        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm.STRIKE_PR)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm)
         fno = self.rename_call_columns(fno)
         df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
         # Adjust Put
-        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", atm.STRIKE_PR)
+        fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", atm)
         fno = self.rename_put_columns(fno)
         df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
         # Calculate new target profit
@@ -372,20 +435,21 @@ class obt(object):
             nd = self.ND
             expd = self.ED
             print("Building position", end=",")
-            print(f" Start : {st:%Y-%m-%d}", end=",")
-            print(f" End : {nd:%Y-%m-%d}", end=",")
-            print(f" Expiry : {expd:%Y-%m-%d}", end=",")
+            self.print_inputs()
             print(f" Call : {cs}", end=",")
             print(f" Put : {ps}", end=",")
             print(f" CallPr : {cpr}", end=",")
             print(f" PutPr : {ppr}")
             spot = self.db.get_index_data_between_dates(st, nd)
+            vix = self.db.get_vix_data_between_dates(st, nd)
+            fut = self.db.get_future_price(st, nd, expd)
             fnocs = self.db.get_strike_price(st, nd, expd, "CE", cs)
             fnocs = self.rename_call_columns(fnocs)
             fnops = self.db.get_strike_price(st, nd, expd, "PE", ps)
             fnops = self.rename_put_columns(fnops)
             spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE": "SPOT"})
-            df = spt.join([fnocs, fnops], how="outer")
+            vx = vix[["CLOSE"]].rename(columns={"CLOSE":"VIX"})
+            df = spt.join([vx, fut, fnocs, fnops], how="outer")
             # call starting price
             if cpr is not None:
                 df["CALL_CLOSE"].iat[0] = cpr
@@ -401,6 +465,7 @@ class obt(object):
             df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
             df = df.assign(ED=expd)
             df = df.assign(ADN=0)
+            df = df.assign(DTE=(df.index - df.ED).dt.days)
             df = self.calculate_pnl(df)
             # Sometimes the start date in data frame will not be same as
             # the given start date
@@ -437,33 +502,14 @@ class obt(object):
             return self.build_ss(cs, ps)
         except Exception as e:
             print("Error processing", end="-")
-            print(f" st='{st:%Y-%m-%d}'", end=",")
-            print(f" nd='{nd:%Y-%m-%d}'", end=",")
-            print(f" ed='{expd:%Y-%m-%d}'", end=",")
+            self.print_inputs()
             print(f" price={price}")
             print_exception(e)
             return None
 
-    def get_atm_strike(self):
-        """
-        Returns the atm strike
-        """
-        # start date
-        st = self.ST
-        # end date
-        nd = self.ND
-        # expiry date.
-        if self.ED is None:
-            ed = nd
-        else:
-            ed = self.ED
+    def process_atm(self, df):
         try:
-            snd = st + timedelta(days=5)
-            df = self.db.get_all_strike_data(st, snd, ed)
-            # Get the first group only
-            stt = df["TIMESTAMP"].unique()[0]
-            df = df.query("TIMESTAMP==@stt and OPEN_INT>0 and CHG_IN_OI!=0")
-            opg = df.groupby("OPTION_TYP")
+            opg = df.query("OPEN_INT>0 and CHG_IN_OI!=0").groupby("OPTION_TYP")
             opc = opg.get_group("CE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
             opc = opc[opc.index == opc.index[0]]
             opp = opg.get_group("PE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
@@ -482,15 +528,120 @@ class obt(object):
             # Starting day may not be a trading day, hence do this.
             idx = opm["DIF"].reset_index(drop=True).idxmin()
             atm = opm[["STRIKE_PR", "CLOSE_P", "CLOSE_C", "PR", "DIF"]].iloc[idx]
-            print(f"ATM strike price {atm.STRIKE_PR:.0f}")
+            atm = atm.STRIKE_PR
+            return atm
+        except:
+            print(f"Error getting atm for {df.name:%Y-%m-%d}")
+            return None
+
+    def get_atm_strike(self):
+        """
+        Retruns ATM strike
+        """
+        try:
+            if self.ATM is None:
+                df = self.db.get_all_strike_data(self.ST, self.ND, self.ED)
+                self.ATM = df.groupby("TIMESTAMP").apply(self.process_atm)
+
+            atml = self.ATM[self.ST:]
+            atmf = atml[atml>0]
+            atm = atmf.iloc[0]
+            self.ST = atm.index[0]
             return atm
         except Exception as e:
             print("Error getting atm strike ", end="-")
-            print(f" st='{st:%Y-%m-%d}'", end=",")
-            print(f" nd='{nd:%Y-%m-%d}'", end=",")
-            print(f" ed='{ed:%Y-%m-%d}'", end=",")
+            self.print_inputs()
             print_exception(e)
             return None
+    
+    def get_atm_strike1(self):
+        """
+        Returns the atm strike
+        """
+        # start date
+        st = self.ST
+        # end date
+        nd = self.ND
+        ed = self.ED
+        #
+        try:
+            snd = st + timedelta(days=5)
+            df = self.db.get_all_strike_data(st, snd, ed)
+            # Get the first group only
+            stt = df["TIMESTAMP"].unique()[0]
+            try:
+                fdf = self.db.get_future_price(stt, stt, ed)
+                odf = df.assign(ATM=np.abs(fdf.FUTURE.iloc[0] - df.query("TIMESTAMP==@stt").STRIKE_PR))
+                fatm = odf[odf.ATM == odf.ATM.min()].STRIKE_PR.iloc[0]
+            except Exception as e:
+                print("Error getting ATM based on FUTURE price.")
+                print_exception(e)
+                fatm = None
+            try:
+                df = df.query("TIMESTAMP==@stt and OPEN_INT>0 and CHG_IN_OI!=0")
+                opg = df.groupby("OPTION_TYP")
+                opc = opg.get_group("CE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
+                opc = opc[opc.index == opc.index[0]]
+                opp = opg.get_group("PE").drop("OPTION_TYP", axis=1).set_index("TIMESTAMP")
+                opp = opp[opp.index == opp.index[0]]
+                opm = opc.merge(
+                    opp,
+                    how="inner",
+                    left_index=True,
+                    on=["STRIKE_PR"],
+                    suffixes=["_C", "_P"],
+                ).reset_index(drop=True)
+                # Difference between call and put price
+                opm = opm.assign(DIF=(opm["CLOSE_C"] - opm["CLOSE_P"]).abs())
+                # Average price
+                opm = opm.assign(PR=opm[["CLOSE_P", "CLOSE_C"]].mean(axis=1))
+                # Starting day may not be a trading day, hence do this.
+                idx = opm["DIF"].reset_index(drop=True).idxmin()
+                atm = opm[["STRIKE_PR", "CLOSE_P", "CLOSE_C", "PR", "DIF"]].iloc[idx]
+                atm = atm.STRIKE_PR
+            except Exception as e:
+                print("Error getting ATM based on OPTIONS data")
+                print_exception(e)
+                atm = None
+            if atm is None:
+                if fatm is None:
+                    raise Exception("Error getting atm strike!")
+                else:
+                    print("Using FUTURE price based ATM")
+                    atm = fatm
+            print(f"ATM strike price {atm:.0f}")
+            return atm
+        except Exception as e:
+            print("Error getting atm strike ", end="-")
+            self.print_inputs()
+            print_exception(e)
+            return None
+
+    def ssg(self, expd, price):
+        full_file_name = Path(self.out_path).joinpath(self.OPFN)
+        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
+        add_style(ewb)
+        smry = []
+        for x in expd.itertuples():
+            try:
+                self.ST = x.ST
+                self.ND = x.ND
+                self.ED = x.ED
+                sdf = self.build_ss_by_price(price)
+                rdf = self.repair_position_by_price(sdf, price, 1)
+                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
+                smry.append(sdf.iloc[-1])
+            except Exception as e:
+                print_exception(e)
+                print("Error processing last...")
+        # save work book
+        summary = pd.DataFrame(smry)
+        create_summary_sheet(ewb, summary, self.OPFN)
+        self.ODF = summary.resample("Y").sum()[["APNL", "PNL"]]
+        self.save_inputs_to_excel(ewb)
+        ewb.book._sheets.reverse()
+        ewb.save()
+        print(f"Saved file {full_file_name}")
 
     def e2e_SSG_by_price(self, num_expiry, price):
         """
@@ -505,35 +656,37 @@ class obt(object):
         """
         expd = self.get_expiry_df(num_expiry)
         #
-        file_name = (
-            f"{self.SYMBOL}_SSG_{num_expiry}"
-            f"_price_{price}"
-            f"_{self.SSAF}"
+        self.OPFN = (
+            f"{self.SYMBOL}_SSG_{self.NEXP}"
+            f"_{self.SSAF:.2f}"
+            f"_{self.MONTH}"
+            f"_{self.NOAD}"
+            f"_{price}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
-        full_file_name = Path(self.out_path).joinpath(file_name)
-        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
-        add_style(ewb)
-        smry = []
-        for x in expd.itertuples():
-            try:
-                self.ST = x.ST
-                self.ND = x.ND
-                self.ED = x.ED
-                sdf = self.build_ss_by_price(price)
-                rdf = self.repair_position_by_price(sdf, price, 1)
-                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", file_name, index=x.Index)
-                smry.append(sdf.iloc[-1])
-            except Exception as e:
-                print_exception(e)
-                print("Error processing last...")
-        # save work book
-        summary = pd.DataFrame(smry)
-        create_summary_sheet(ewb, summary, file_name)
-        self.save_inputs_to_excel(ewb)
-        ewb.book._sheets.reverse()
-        ewb.save()
-        print(f"Saved file {full_file_name}")
+        self.ssg(expd, price)
+
+    def SSG_ndays_before_by_price(self, num_expiry, price):
+        """
+        Expiry to ndays before straddle creator
+        
+        Parameters
+        ----------
+        num_expiry : int
+            Number of expirys to process
+        price : float
+            Price to create the strangle
+        """
+        expd = self.get_expiry_df_before_num_days(num_expiry)
+        self.OPFN = (
+            f"{self.SYMBOL}_SSG_{self.NEXP}"
+            f"_{self.SSAF:.2f}"
+            f"_{self.NDAYS}"
+            f"_{self.NOAD}"
+            f"_{price}"
+            f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
+        )
+        self.ssg(expd, price)
 
     def e2e_SSG_SE_by_price(self, st, nd, ed, price):
         """ Creates strangle for single expiry day
@@ -555,7 +708,6 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
-        self.ODF = rdf
         return rdf
 
     def e2e_SSG_SE_custom(self, conf):
@@ -583,8 +735,34 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
-        self.ODF = sdf
         return sdf
+
+    def ssr(self, expd):
+        full_file_name = Path(self.out_path).joinpath(self.OPFN)
+        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
+        add_style(ewb)
+        smry = []
+        for x in expd.itertuples():
+            try:
+                self.ST = x.ST
+                self.ND = x.ND
+                self.ED = x.ED
+                atm = self.get_atm_strike()
+                sdf = self.build_ss(atm, atm)
+                rdf = self.repair_position_by_straddle(sdf, 1)
+                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
+                smry.append(sdf.iloc[-1])
+            except Exception as e:
+                print_exception(e)
+                print("Error processing last...")
+        # save work book
+        summary = pd.DataFrame(smry)
+        create_summary_sheet(ewb, summary, self.OPFN)
+        self.ODF = summary.resample("Y").sum()[["APNL", "PNL"]]
+        self.save_inputs_to_excel(ewb)
+        ewb.book._sheets.reverse()
+        ewb.save()
+        print(f"Saved file {full_file_name}")
 
     def e2e_SSR(self, num_expiry):
         """
@@ -596,38 +774,33 @@ class obt(object):
             Number of expirys to process
         """
         expd = self.get_expiry_df(num_expiry)
-        #
-        file_name = (
-            f"{self.SYMBOL}_SSR_{num_expiry}"
+        self.OPFN = (
+            f"{self.SYMBOL}_SSR_{self.NEXP}"
             f"_{self.SSAF:.2f}"
             f"_{self.MONTH}"
             f"_{self.NOAD}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
-        full_file_name = Path(self.out_path).joinpath(file_name)
-        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
-        add_style(ewb)
-        smry = []
-        for x in expd.itertuples():
-            try:
-                self.ST = x.ST
-                self.ND = x.ND
-                self.ED = x.ED
-                atm = self.get_atm_strike()
-                sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
-                rdf = self.repair_position_by_straddle(sdf, 1)
-                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", file_name, index=x.Index)
-                smry.append(sdf.iloc[-1])
-            except Exception as e:
-                print_exception(e)
-                print("Error processing last...")
-        # save work book
-        summary = pd.DataFrame(smry)
-        create_summary_sheet(ewb, summary, file_name)
-        self.save_inputs_to_excel(ewb)
-        ewb.book._sheets.reverse()
-        ewb.save()
-        print(f"Saved file {full_file_name}")
+        self.ssr(expd)
+
+    def SSR_ndays_before(self, num_expiry):
+        """
+        Expiry to ndays before straddle creator
+        
+        Parameters
+        ----------
+        num_expiry : int
+            Number of expirys to process
+        """
+        expd = self.get_expiry_df_before_num_days(num_expiry)
+        self.OPFN = (
+            f"{self.SYMBOL}_SSR_{self.NEXP}"
+            f"_{self.SSAF:.2f}"
+            f"_{self.NDAYS}"
+            f"_{self.NOAD}"
+            f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
+        )
+        self.ssr(expd)
 
     def e2e_SSR_SE_custom(self, conf):
         """ Creates straddle for single expiry day
@@ -648,7 +821,6 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
-        self.ODF = sdf
         return sdf
 
     def e2e_SSR_SE(self, st, nd, ed):
@@ -658,7 +830,7 @@ class obt(object):
         self.ND = nd
         self.ED = ed
         atm = self.get_atm_strike()
-        sdf = self.build_ss(atm.STRIKE_PR, atm.STRIKE_PR)
+        sdf = self.build_ss(atm, atm)
         # Do not adjust before number of days
         self.ST = sdf.index[self.NOAD]
         rdf = self.repair_position_by_straddle(sdf, 1)
@@ -673,5 +845,4 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
-        self.ODF = rdf
         return rdf

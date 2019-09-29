@@ -16,7 +16,7 @@ def cli(ctx, symbol, mitr, ssaf, noad):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
-    ob.symbol = symbol
+    ob.SYMBOL = symbol
     ob.MITR = mitr
     ob.SSAF = ssaf
     ob.NOAD = noad
@@ -30,7 +30,7 @@ def cli(ctx, symbol, mitr, ssaf, noad):
     "-month", help="1 - current month, 2 - next month, 3 - far month", default=1
 )
 @click.option("-price", help="what price strangle needs to be created", default=50)
-def stg(ctx, nexp, month, price):
+def ssg(ctx, nexp, month, price):
     """ Run strangle """
     ctx.obj["NEXP"] = nexp
     ctx.obj["WM"] = month
@@ -40,6 +40,23 @@ def stg(ctx, nexp, month, price):
     ob.MONTH = month
     ob.e2e_SSG_by_price(nexp, price)
 
+@cli.command(
+    help=(
+        "Study strangles for given number of expiry and ndays before by price"
+    )
+)
+@click.pass_context
+@click.option("-nexp", help="Num expiries", default=12)
+@click.option(
+    "-ndays", help="start straddle number of days before expiry", default=30
+)
+@click.option("-price", help="what price strangle needs to be created", default=50)
+def ssgnd(ctx, nexp, ndays, price):
+    """ Run strangle """
+    ob = ctx.obj["OBT"]
+    ob.NEXP = nexp
+    ob.NDAYS = ndays
+    ob.SSG_ndays_before_by_price(nexp, price)
 
 @cli.command(
     help="Study strangle for a given start date, end date and expiry date and price"
@@ -49,7 +66,7 @@ def stg(ctx, nexp, month, price):
 @click.option("-ND", help="End date", default=None)
 @click.option("-ED", help="Expiry date", default=None)
 @click.option("-price", help="what price strangle needs to be created", default=50)
-def sstg(ctx, st, nd, ed, price):
+def ssgc(ctx, st, nd, ed, price):
     """ Run strangle """
     ctx.obj["ST"] = st
     ctx.obj["ND"] = nd
@@ -68,7 +85,7 @@ def sstg(ctx, st, nd, ed, price):
 )
 @click.pass_context
 @click.option("-name", help="File name", default=None)
-def sstgf(ctx, name):
+def ssgsf(ctx, name):
     """ Run strangle """
     with open(name, "r") as f:
         conf = json.loads(f.read())
@@ -90,7 +107,7 @@ def sstgf(ctx, name):
 )
 @click.pass_context
 @click.option("-name", help="File name", default=None)
-def sstgc(ctx, name):
+def ssgcf(ctx, name):
     """ Run strangle """
     with open(name, "r") as f:
         conf = json.loads(f.read())
@@ -125,6 +142,22 @@ def ssr(ctx, nexp, month):
     ob.MONTH = month
     ob.e2e_SSR(nexp)
 
+@cli.command(
+    help=(
+        "Study straddles for given number of expiry and ndays before"
+    )
+)
+@click.pass_context
+@click.option("-nexp", help="Num expiries", default=12)
+@click.option(
+    "-ndays", help="start straddle number of days before expiry", default=30
+)
+def ssrnd(ctx, nexp, ndays):
+    """ Run straddle """
+    ob = ctx.obj["OBT"]
+    ob.NEXP = nexp
+    ob.NDAYS = ndays
+    ob.SSR_ndays_before(nexp)
 
 @cli.command(help="Study straddles for start, end and expiry days")
 @click.pass_context

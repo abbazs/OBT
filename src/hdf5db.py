@@ -11,8 +11,8 @@ from src import dutil
 
 class hdf5db(object):
     def __init__(self):
-        self._symbol = None
-        self._instrument = None
+        self._SYMBOL = None
+        self._INSTRUMENT = None
         self._path = None
         pass
 
@@ -35,32 +35,32 @@ class hdf5db(object):
         return db
 
     @property
-    def symbol(self):
+    def SYMBOL(self):
         """symbol to be processed"""
-        if self._symbol is None:
+        if self._SYMBOL is None:
             raise Exception("Symbol is not yet set.")
         else:
-            return self._symbol
+            return self._SYMBOL
 
-    @symbol.setter
-    def symbol(self, value):
-        self._symbol = value.upper()
+    @SYMBOL.setter
+    def SYMBOL(self, value):
+        self._SYMBOL = value.upper()
 
     @property
-    def instrument(self):
+    def INSTRUMENT(self):
         """instrument to be processed"""
-        if self._instrument is None:
-            raise Exception("Symbol is not yet set.")
+        if self._INSTRUMENT is None:
+            raise Exception("Instrument is not yet set.")
         else:
-            return self._instrument
+            return self._INSTRUMENT
 
-    @instrument.setter
-    def instrument(self, value):
-        self._instrument = value.upper()
+    @INSTRUMENT.setter
+    def INSTRUMENT(self, value):
+        self._INSTRUMENT = value.upper()
 
     def set_symbol_instrument(self, symbol, instrument):
-        self.symbol = symbol
-        self.instrument = instrument
+        self.SYMBOL = symbol
+        self.INSTRUMENT = instrument
 
     @property
     def path(self):
@@ -68,7 +68,7 @@ class hdf5db(object):
             raise Exception("DB path has not been set.")
         else:
             return self._path
-    
+
     @path.setter
     def path(self, value):
         if value is not None:
@@ -81,9 +81,9 @@ class hdf5db(object):
 
     def get_past_n_expiry_dates(self, n, instrument=None):
         try:
-            s = self.symbol
+            s = self.SYMBOL
             if instrument is None:
-                i = self.instrument
+                i = self.INSTRUMENT
             else:
                 i = instrument
             cd = dutil.get_current_date()
@@ -100,8 +100,8 @@ class hdf5db(object):
 
     def get_next_expiry_dates(self):
         try:
-            s = self.symbol
-            i = self.instrument
+            s = self.SYMBOL
+            i = self.INSTRUMENT
             cd = dutil.get_current_date()
             df = pd.read_hdf(
                 self.path,
@@ -116,8 +116,8 @@ class hdf5db(object):
 
     def get_expiry_dates_on_date(self, date):
         try:
-            s = self.symbol
-            i = self.instrument
+            s = self.SYMBOL
+            i = self.INSTRUMENT
             ed = dutil.process_date(date)
             st = ed - timedelta(days=5)
             dbp = self.path
@@ -139,7 +139,7 @@ class hdf5db(object):
 
     def get_index_data_between_dates(self, st, nd):
         try:
-            s = self.symbol
+            s = self.SYMBOL
             std = dutil.process_date(st)
             ndd = dutil.process_date(nd)
             dbp = self.path
@@ -152,6 +152,32 @@ class hdf5db(object):
         except Exception as e:
             print_exception(e)
 
+    def get_vix_data_between_dates(self, st, nd):
+        try:
+            s = self.SYMBOL
+            std = dutil.process_date(st)
+            ndd = dutil.process_date(nd)
+            dbp = self.path
+            df = pd.read_hdf(
+                dbp, "vix", where="TIMESTAMP>=std and TIMESTAMP<=ndd"
+            ).sort_values("TIMESTAMP")
+            df = df.drop_duplicates()
+            df = df.set_index("TIMESTAMP")
+            return df
+        except Exception as e:
+            print_exception(e)
+
+    def get_vix_data_for_last_n_days(self, n_days):
+        try:
+            end_date = dutil.get_current_date()
+            # Add 5 days to n_days and filter only required number days
+            start_date = end_date - timedelta(days=n_days + 5)
+            vix_data = self.get_vix_data_between_dates(start_date, end_date)
+            st = end_date - timedelta(days=n_days)
+            return vix_data[st:]
+        except Exception as e:
+            print_exception(e)
+
     def get_index_data_for_last_n_days(self, n_days):
         try:
             end_date = dutil.get_current_date()
@@ -159,14 +185,46 @@ class hdf5db(object):
             start_date = end_date - timedelta(days=n_days + 5)
             spot_data = self.get_index_data_between_dates(start_date, end_date)
             st = end_date - timedelta(days=n_days)
-            df = spot_data.set_index("TIMESTAMP")
-            return df.loc[df.index >= st]
+            return spot_data[st:]
+        except Exception as e:
+            print_exception(e)
+
+    def get_future_price(self, st, nd, expd):
+        try:
+            s = self.SYMBOL
+            i = "FUTIDX"
+            st = dutil.process_date(st)
+            nd = dutil.process_date(nd)
+            expd = dutil.process_date(expd)
+            dbp = self.path
+            rule = (
+                "SYMBOL==s and "
+                "INSTRUMENT==i and "
+                "TIMESTAMP>=st and "
+                "TIMESTAMP<=nd and "
+                "EXPIRY_DT==expd"
+            )
+            df = (
+                pd.read_hdf(
+                    dbp,
+                    "fno",
+                    where=rule,
+                    columns=["TIMESTAMP", "CLOSE", "OPEN_INT", "CHG_IN_OI"],
+                )
+                .set_index("TIMESTAMP")
+                .sort_index()
+            )
+            df = df.drop_duplicates()
+            df = df.rename(
+                columns={"CLOSE": "FUTURE", "OPEN_INT": "FOI", "CHG_IN_OI": "FCOI"}
+            )
+            return df
         except Exception as e:
             print_exception(e)
 
     def get_strike_price(self, st, nd, expd, opt, strike):
         try:
-            s = self.symbol
+            s = self.SYMBOL
             i = "OPTIDX"
             st = dutil.process_date(st)
             nd = dutil.process_date(nd)
@@ -209,7 +267,7 @@ class hdf5db(object):
         returns a data frame sorted in ascending order by `TIMESTAMP`
         """
         try:
-            s = self.symbol
+            s = self.SYMBOL
             i = "OPTIDX"
             st = dutil.process_date(st)
             nd = dutil.process_date(nd)

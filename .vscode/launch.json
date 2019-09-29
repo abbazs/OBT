@@ -45,11 +45,13 @@
             "cwd": "${workspaceFolder}",
             "program": "${workspaceFolder}\\run.py",
             "args": [
-                "-mitr=1",
+                "-mitr=10",
+                "-ssaf=0.95",
+                "-noad=1",
                 "ssrs",
-                "-ST=2018-10-26",
-                "-ND=2018-11-29",
-                "-ED=2018-11-29",
+                "-ST=2019-04-26",
+                "-ND=2019-07-25",
+                "-ED=2019-07-25",
             ],
             "console": "integratedTerminal"
         },
@@ -75,6 +77,22 @@
             "args": [
                 "stg",
                 "-nexp=12"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: run.py ssr testing",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}\\run.py",
+            "args": [
+                "-mitr=10",
+                "-ssaf=0.95",
+                "-noad=1",
+                "ssr",
+                "-nexp=6",
+                "-month=3"
             ],
             "console": "integratedTerminal"
         }
