@@ -11,8 +11,11 @@ from src.obt import obt
 @click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
 @click.option("-ssaf", help="Strangle or straddle adjustment factor", default=0.01)
 @click.option("-noad", help="No adjustment if num days to expiry is less than noad", default=5)
+@click.option("-dompa", help="Do minimum profit adjustment?", is_flag=True)
+@click.option("-ddmpa", help="Do not do minium profit adjustment before number of days", default=5)
+@click.option("-aampa", help="Afjust after minium profit achieved in price", default=200)
 @click.pass_context
-def cli(ctx, symbol, mitr, ssaf, noad):
+def cli(ctx, symbol, mitr, ssaf, noad, dompa, ddmpa, aampa):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
@@ -20,6 +23,9 @@ def cli(ctx, symbol, mitr, ssaf, noad):
     ob.MITR = mitr
     ob.SSAF = ssaf
     ob.NOAD = noad
+    ob.DOMPA = dompa
+    ob.DDMPA = ddmpa
+    ob.AAMPA = aampa
     ctx.obj["OBT"] = ob
 
 
@@ -37,6 +43,7 @@ def ssg(ctx, nexp, month, price):
     ctx.obj["PR"] = price
     print(ctx.obj)
     ob = ctx.obj["OBT"]
+    ob.NEXP = nexp
     ob.MONTH = month
     ob.e2e_SSG_by_price(nexp, price)
 

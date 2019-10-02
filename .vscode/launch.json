@@ -21,6 +21,45 @@
             ],
             "console": "integratedTerminal"
         },
+                {
+                    "name": "Python: run.py ssg nf",
+                    "type": "python",
+                    "request": "launch",
+                    "cwd": "${workspaceFolder}",
+                    "program": "${workspaceFolder}\\run.py",
+                    "args": [
+                        "-mitr=10",
+                        "-symbol=nifty",
+                        "-ssaf=0.95",
+                        "-noad=1",
+                        "-dompa",
+                        "-aampa=40",
+                        "ssg",
+                        "-nexp=4",
+                        "-month=1",
+                        "-price=100",
+                    ],
+                    "console": "integratedTerminal"
+                },
+                {
+                    "name": "Python: run.py ssrnd nf",
+                    "type": "python",
+                    "request": "launch",
+                    "cwd": "${workspaceFolder}",
+                    "program": "${workspaceFolder}\\run.py",
+                    "args": [
+                        "-mitr=10",
+                        "-symbol=nifty",
+                        "-ssaf=0.95",
+                        "-noad=1",
+                        "-dompa",
+                        "-aampa=200",
+                        "ssrnd",
+                        "-nexp=4",
+                        "-ndays=75"
+                    ],
+                    "console": "integratedTerminal"
+                },
         {
             "name": "Python: run.py ssrs bn",
             "type": "python",
