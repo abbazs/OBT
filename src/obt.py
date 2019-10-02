@@ -64,6 +64,13 @@ class obt(object):
             self.ATM = None
         except Exception as e:
             print_exception(e)
+    
+    @property
+    def OUTPUT(self):
+        if self.ODF is None:
+            raise Exception("Output dataframe not generated.")
+        else:
+            return len(self.ODF)
 
     @property
     def SSAF(self):
@@ -81,7 +88,7 @@ class obt(object):
     def MITR(self):
         """Number or iterations to be processed"""
         if self._MITR is None:
-            raise Exception("Max repair iterations is not set.")
+            raise Exception("MITR is None - Max repair iterations is not set.")
         else:
             return self._MITR
 
@@ -93,7 +100,7 @@ class obt(object):
     def CITR(self):
         """ Current iteration number """
         if self._CITR is None:
-            raise Exception("Current iteration is not set.")
+            raise Exception("CITR is None - Current iteration is not set.")
         else:
             return self._CITR
 
@@ -105,7 +112,9 @@ class obt(object):
     def NOAD(self):
         """ No adjustment if the number of days to expiry is less than """
         if self._NOAD is None:
-            raise Exception("No adjustment after number of days not set.")
+            raise Exception(
+                "NOAD is None - No adjustment after number of days not set."
+            )
         else:
             return self._NOAD
 
@@ -117,7 +126,7 @@ class obt(object):
     def MONTH(self):
         """ Which month, current, next or far? """
         if self._MONTH is None:
-            raise Exception("Month to process has not been set.")
+            raise Exception("MONTH is None - Month to process has not been set.")
         else:
             return self._MONTH
 
@@ -130,7 +139,7 @@ class obt(object):
         """ Number of days to ahead of expiry to process """
         if self._NDAYS is None:
             raise Exception(
-                "Number of days to ahead of expiry to process has not been set."
+                "NDAYS is None - Number of days to ahead of expiry to process has not been set."
             )
         else:
             return self._NDAYS
@@ -143,7 +152,9 @@ class obt(object):
     def NEXP(self):
         """ Number of expirys to process """
         if self._NEXP is None:
-            raise Exception("Number of expirys to process has not been set.")
+            raise Exception(
+                "NEXP is None - Number of expirys to process has not been set."
+            )
         else:
             return self._NEXP
 
@@ -155,7 +166,7 @@ class obt(object):
     def OPFN(self):
         """ Output file name """
         if self._OPFN is None:
-            raise Exception("Output file name has not been set.")
+            raise Exception("OPFN is None - Output file name has not been set.")
         else:
             return self._OPFN
 
@@ -167,7 +178,7 @@ class obt(object):
     def SYMBOL(self):
         """symbol to be processed"""
         if self._SYMBOL is None:
-            raise Exception("Symbol is not yet set.")
+            raise Exception("SYMBOL is None - Symbol is not yet set.")
         else:
             return self._SYMBOL
 
@@ -180,7 +191,7 @@ class obt(object):
     def ST(self):
         """ Start Date """
         if self._ST is None:
-            raise Exception("Start date has not been set.")
+            raise Exception("ST is None - Start date has not been set.")
         else:
             return self._ST
 
@@ -192,7 +203,7 @@ class obt(object):
     def ND(self):
         """ End Date """
         if self._ND is None:
-            raise Exception("End date has not been set.")
+            raise Exception("ND is None - End date has not been set.")
         else:
             return self._ND
 
@@ -211,7 +222,7 @@ class obt(object):
     @ED.setter
     def ED(self, value):
         self._ED = process_date(value)
-        # When ever ED is being set reset 
+        # When ever ED is being set reset
         # the value of CITR to 1
         self.CITR = 1
         # Reset ATM to None
@@ -230,9 +241,7 @@ class obt(object):
             index=[0],
         )
         create_inputsheet(ewb, df.T)
-        self.ODF.to_excel(
-            excel_writer=ewb, sheet_name="INPUTS", startrow=0, startcol=4
-        )
+        self.ODF.to_excel(excel_writer=ewb, sheet_name="INPUTS", startrow=0, startcol=4)
 
     def get_expiry_df(self, num_expiry):
         """
@@ -470,7 +479,7 @@ class obt(object):
             fnops = self.db.get_strike_price(st, nd, expd, "PE", ps)
             fnops = self.rename_put_columns(fnops)
             spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE": "SPOT"})
-            vx = vix[["CLOSE"]].rename(columns={"CLOSE":"VIX"})
+            vx = vix[["CLOSE"]].rename(columns={"CLOSE": "VIX"})
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
             # call starting price
             if cpr is not None:
@@ -566,8 +575,8 @@ class obt(object):
                 df = self.db.get_all_strike_data(self.ST, self.ND, self.ED)
                 self.ATM = df.groupby("TIMESTAMP").apply(self.process_atm)
 
-            atml = self.ATM[self.ST:]
-            atmf = atml[atml>0]
+            atml = self.ATM[self.ST :]
+            atmf = atml[atml > 0]
             atm = atmf.iloc[0]
             self.ST = atmf.index[0]
             return atm
@@ -668,6 +677,7 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
+        self.ODF = rdf
         return rdf
 
     def e2e_SSG_SE_custom(self, conf):
@@ -695,6 +705,7 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
+        self.ODF = sdf
         return sdf
 
     def ssr(self, expd):
@@ -781,6 +792,7 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
+        self.ODF = sdf
         return sdf
 
     def e2e_SSR_SE(self, st, nd, ed):
@@ -805,4 +817,5 @@ class obt(object):
         create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
+        self.ODF = rdf
         return rdf
