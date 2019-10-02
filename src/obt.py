@@ -45,7 +45,9 @@ class obt(object):
             Even it has value no gaurantee it the right output"""
             self.ODF = None
             """ Max repair iterations """
-            self._MITR = 5
+            self._MITR = None
+            """ Current iteration number """
+            self._CITR = None
             """ Strangle or straddle adjustment factor """
             self._SSAF = None
             """ No adjustment if the number of days to expiry is less than NOAD """
@@ -86,6 +88,18 @@ class obt(object):
     @MITR.setter
     def MITR(self, value):
         self._MITR = value
+
+    @property
+    def CITR(self):
+        """ Current iteration number """
+        if self._CITR is None:
+            raise Exception("Current iteration is not set.")
+        else:
+            return self._CITR
+
+    @CITR.setter
+    def CITR(self, value):
+        self._CITR = value
 
     @property
     def NOAD(self):
@@ -197,6 +211,11 @@ class obt(object):
     @ED.setter
     def ED(self, value):
         self._ED = process_date(value)
+        # When ever ED is being set reset 
+        # the value of CITR to 1
+        self.CITR = 1
+        # Reset ATM to None
+        self.ATM = None
 
     def save_inputs_to_excel(self, ewb):
         df = pd.DataFrame(
@@ -299,9 +318,9 @@ class obt(object):
         return sp
 
     def print_inputs(self):
-        print(f" st='{self.ST:%Y-%m-%d}'", end=",")
-        print(f" nd='{self.ND:%Y-%m-%d}'", end=",")
-        print(f" ed='{self.ED:%Y-%m-%d}'", end=",")
+        print(f" -ST={self.ST:%Y-%m-%d}", end=",")
+        print(f" -ND={self.ND:%Y-%m-%d}", end=",")
+        print(f" -ED={self.ED:%Y-%m-%d}", end=",")
 
     def calculate_pnl(self, df):
         csp = df.iloc[0]["CALL_CLOSE"]
@@ -322,16 +341,16 @@ class obt(object):
         df = df.assign(WIDTH=df.UBK - df.LBK)
         df = df.assign(CBK=df.CS + (tp * self.SSAF))
         df = df.assign(PBK=df.PS - (tp * self.SSAF))
-        df = df.assign(UW=df.CS - df.FUTURE)
-        df = df.assign(LW=df.FUTURE - df.PS)
+        df = df.assign(UW=df.CBK - df.FUTURE)
+        df = df.assign(LW=df.FUTURE - df.PBK)
         df = df.assign(WR=df.UW / df.LW)
         return df
 
-    def check_adjustment_required(self, df, itr):
+    def check_adjustment_required(self, df):
         """ Checks if adjustment is required for position
         """
-        print(f"Repair iteraion ({itr}) : date {self.ST:%Y-%m-%d}")
-        if itr > self.MITR:
+        print(f"Repair iteraion ({self.CITR}) : date {self.ST:%Y-%m-%d}")
+        if self.CITR > self.MITR:
             print(f"Stopping repair iteration since max iteration done...")
             return False
         # Do not adjust if last adjustment is less than NOAD
@@ -361,14 +380,14 @@ class obt(object):
             else:
                 return dfii
 
-    def repair_position_by_price(self, df, price, itr):
+    def repair_position_by_price(self, df, price):
         """ Repairs a strangle position
         Which ever leg is in profit, more than 50% of price
         close it and move to the next strike available at
         the price.
         Do the repair only when any one of the leg is in loss.
         """
-        dfii = self.check_adjustment_required(df, itr)
+        dfii = self.check_adjustment_required(df)
         if dfii is False:
             return df
         print("Need to adjust")
@@ -395,13 +414,14 @@ class obt(object):
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
-        df.loc[fno.index, "ADN"] = itr
-        return self.repair_position_by_price(df, price, itr + 1)
+        df.loc[fno.index, "ADN"] = self.CITR
+        self.CITR += 1
+        return self.repair_position_by_price(df, price)
 
-    def repair_position_by_straddle(self, df, itr):
+    def repair_position_by_straddle(self, df):
         """ Repairs a straddle position
         """
-        dfii = self.check_adjustment_required(df, itr)
+        dfii = self.check_adjustment_required(df)
         if dfii is False:
             return df
         dfk = df[self.ST :].iloc[0]
@@ -423,14 +443,16 @@ class obt(object):
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
-        df.loc[fno.index, "ADN"] = itr
-        return self.repair_position_by_straddle(df, itr + 1)
+        df.loc[fno.index, "ADN"] = self.CITR
+        self.CITR += 1
+        return self.repair_position_by_straddle(df)
 
     def build_ss(self, cs, ps, cpr=None, ppr=None):
         """
         Builds both strangle and straddle
         """
         try:
+            self.CITR = 1
             st = self.ST
             nd = self.ND
             expd = self.ED
@@ -465,7 +487,8 @@ class obt(object):
             df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
             df = df.assign(ED=expd)
             df = df.assign(ADN=0)
-            df = df.assign(DTE=(df.index - df.ED).dt.days)
+            df = df.assign(DTE=(df.ED - df.index).dt.days)
+            df = df.assign(DTER=(df.ED - df.index[::-1]).dt.days)
             df = self.calculate_pnl(df)
             # Sometimes the start date in data frame will not be same as
             # the given start date
@@ -546,7 +569,7 @@ class obt(object):
             atml = self.ATM[self.ST:]
             atmf = atml[atml>0]
             atm = atmf.iloc[0]
-            self.ST = atm.index[0]
+            self.ST = atmf.index[0]
             return atm
         except Exception as e:
             print("Error getting atm strike ", end="-")
@@ -565,7 +588,7 @@ class obt(object):
                 self.ND = x.ND
                 self.ED = x.ED
                 sdf = self.build_ss_by_price(price)
-                rdf = self.repair_position_by_price(sdf, price, 1)
+                rdf = self.repair_position_by_price(sdf, price)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
                 smry.append(sdf.iloc[-1])
             except Exception as e:
@@ -632,7 +655,7 @@ class obt(object):
         self.ND = nd
         self.ED = ed
         sdf = self.build_ss_by_price(price)
-        rdf = self.repair_position_by_price(sdf, price, 1)
+        rdf = self.repair_position_by_price(sdf, price)
         file_name = (
             f"{self.SYMBOL}_SSG_"
             f"{self.ED:%Y-%b-%d}"
@@ -659,7 +682,7 @@ class obt(object):
             price = (conf["CPR"] + conf["PPR"]) / 2
         else:
             price = sdf["TP"].iloc[0] / 2
-        rdf = self.repair_position_by_price(sdf, price, 1)
+        rdf = self.repair_position_by_price(sdf, price)
         file_name = (
             f"{self.SYMBOL}_SSG_custom_"
             f"{self.ED:%Y-%b-%d}"
@@ -686,7 +709,7 @@ class obt(object):
                 self.ED = x.ED
                 atm = self.get_atm_strike()
                 sdf = self.build_ss(atm, atm)
-                rdf = self.repair_position_by_straddle(sdf, 1)
+                rdf = self.repair_position_by_straddle(sdf)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
                 smry.append(sdf.iloc[-1])
             except Exception as e:
@@ -746,7 +769,7 @@ class obt(object):
         self.ND = conf["ND"]
         self.ED = conf["ED"]
         sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
-        rdf = self.repair_position_by_straddle(sdf, 1)
+        rdf = self.repair_position_by_straddle(sdf)
         file_name = (
             f"{self.SYMBOL}_SSR_custom_"
             f"{self.ED:%Y-%b-%d}"
@@ -770,7 +793,7 @@ class obt(object):
         sdf = self.build_ss(atm, atm)
         # Do not adjust before number of days
         self.ST = sdf.index[self.NOAD]
-        rdf = self.repair_position_by_straddle(sdf, 1)
+        rdf = self.repair_position_by_straddle(sdf)
         file_name = (
             f"{self.SYMBOL}_SSRSE_"
             f"{self.ED:%Y-%b-%d}"

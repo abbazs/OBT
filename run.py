@@ -139,6 +139,7 @@ def ssgcf(ctx, name):
 def ssr(ctx, nexp, month):
     """ Run straddle """
     ob = ctx.obj["OBT"]
+    ob.NEXP = nexp
     ob.MONTH = month
     ob.e2e_SSR(nexp)
 
