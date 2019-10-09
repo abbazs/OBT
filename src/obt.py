@@ -481,6 +481,7 @@ class obt(object):
             spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE": "SPOT"})
             vx = vix[["CLOSE"]].rename(columns={"CLOSE": "VIX"})
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
+            df = df.assign(FUTURE=df.SPOT[df.FUTURE.isna()])
             # call starting price
             if cpr is not None:
                 df["CALL_CLOSE"].iat[0] = cpr
