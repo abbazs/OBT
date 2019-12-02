@@ -4,6 +4,7 @@ POSITION_COLUMNS = [
     "SYMBOL",
     "SPOT",
     "FUTURE",
+    "ATM",
     "PS",
     "CS",
     "PUT_CLOSE",
@@ -12,6 +13,8 @@ POSITION_COLUMNS = [
     "APNL",
     "PNL",
     "WIDTH",
+    "PBS",
+    "CBS",
     "PBK",  # Put breakeven
     "CBK",  # Call breakeven
     "ITP",  # Initial target profit

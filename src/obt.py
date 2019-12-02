@@ -62,6 +62,8 @@ class obt(object):
             self._OPFN = None
             """ ATM for the given period """
             self.ATM = None
+            """ STRIKE INCREMENT INTERVAL """
+            self._SINCR = None
         except Exception as e:
             print_exception(e)
     
@@ -147,6 +149,20 @@ class obt(object):
     @NDAYS.setter
     def NDAYS(self, value):
         self._NDAYS = value
+
+    @property
+    def SINCR(self):
+        """ Number of days to ahead of expiry to process """
+        if self._SINCR is None:
+            raise Exception(
+                "SINCR is None - Strike increment interval is none."
+            )
+        else:
+            return self._SINCR
+
+    @SINCR.setter
+    def SINCR(self, value):
+        self._SINCR = value
 
     @property
     def NEXP(self):
@@ -343,17 +359,23 @@ class obt(object):
         return df
 
     def calculate_repaired_pnl(self, df, tp):
-        df = df.assign(TP=tp)
-        df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
-        df = df.assign(UBK=df.CS + tp)
-        df = df.assign(LBK=df.PS - tp)
-        df = df.assign(WIDTH=df.UBK - df.LBK)
-        df = df.assign(CBK=df.CS + (tp * self.SSAF))
-        df = df.assign(PBK=df.PS - (tp * self.SSAF))
-        df = df.assign(UW=df.CBK - df.FUTURE)
-        df = df.assign(LW=df.FUTURE - df.PBK)
-        df = df.assign(WR=df.UW / df.LW)
-        return df
+        try:
+            df = df.assign(TP=tp)
+            df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
+            df = df.assign(UBK=df.CS + tp)
+            df = df.assign(LBK=df.PS - tp)
+            df = df.assign(WIDTH=df.UBK - df.LBK)
+            df = df.assign(CBK=df.CS + (tp * self.SSAF))
+            df = df.assign(PBK=df.PS - (tp * self.SSAF))
+            df = df.assign(CBS=(df.CBK/self.SINCR).apply(np.floor) * self.SINCR)
+            df = df.assign(PBS=(df.PBK/self.SINCR).apply(np.ceil) * self.SINCR)
+            df = df.assign(UW=df.CBK - df.FUTURE)
+            df = df.assign(LW=df.FUTURE - df.PBK)
+            df = df.assign(WR=df.UW / df.LW)
+            return df
+        except Exception as e:
+            print_exception(e)
+            return None
 
     def check_adjustment_required(self, df):
         """ Checks if adjustment is required for position
@@ -374,7 +396,7 @@ class obt(object):
                 return False
         # dfloc
         sdf = df[self.ST :]
-        dfs = sdf.query("FUTURE>@sdf.CBK.iloc[0] or FUTURE<@sdf.PBK.iloc[0]")
+        dfs = sdf.query("ATM>=@sdf.CBS.iloc[0] or ATM<@sdf.PBS.iloc[0]")
         if len(dfs) == 0:
             print(f"Not adjusting any further position in control...")
             return False
@@ -481,7 +503,9 @@ class obt(object):
             spt = spot[["SYMBOL", "CLOSE"]].rename(columns={"CLOSE": "SPOT"})
             vx = vix[["CLOSE"]].rename(columns={"CLOSE": "VIX"})
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
-            df = df.assign(FUTURE=df.SPOT[df.FUTURE.isna()])
+            df.loc[df.FUTURE.isna(), "FUTURE"] = df.SPOT
+            atm = self.get_atm_strike()
+            df = df.assign(ATM=self.ATM[self.ST :])
             # call starting price
             if cpr is not None:
                 df["CALL_CLOSE"].iat[0] = cpr
@@ -668,7 +692,7 @@ class obt(object):
         rdf = self.repair_position_by_price(sdf, price)
         file_name = (
             f"{self.SYMBOL}_SSG_"
-            f"{self.ED:%Y-%b-%d}"
+            f"{self.ED:%Y-%b-%d}_"
             f"price_{price}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
@@ -696,7 +720,7 @@ class obt(object):
         rdf = self.repair_position_by_price(sdf, price)
         file_name = (
             f"{self.SYMBOL}_SSG_custom_"
-            f"{self.ED:%Y-%b-%d}"
+            f"{self.ED:%Y-%b-%d}_"
             f"price_{price:.2f}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
@@ -780,11 +804,12 @@ class obt(object):
         self.ST = conf["ST"]
         self.ND = conf["ND"]
         self.ED = conf["ED"]
+        self.SINCR = conf["SINCR"]
         sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
         rdf = self.repair_position_by_straddle(sdf)
         file_name = (
             f"{self.SYMBOL}_SSR_custom_"
-            f"{self.ED:%Y-%b-%d}"
+            f"{self.ED:%Y-%b-%d}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
@@ -809,7 +834,7 @@ class obt(object):
         rdf = self.repair_position_by_straddle(sdf)
         file_name = (
             f"{self.SYMBOL}_SSRSE_"
-            f"{self.ED:%Y-%b-%d}"
+            f"{self.ED:%Y-%b-%d}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
