@@ -1,0 +1,49 @@
+{
+    "name": "User given name",
+    "id": 0,
+    "user": "userid",
+    "created_on": "date",
+    "active": true,
+    "PNL": 0,
+    "positions": [
+        {
+            "index": 0,
+            "symbol": "NIFTY",
+            "instrument": "options",
+            "type": "call",
+            "strike": 12100,
+            "ST": "start date",
+            "ND": "end date",
+            "ED": "expiry date",
+            "TT": "SELL",
+            "OPR": 203,
+            "CPR": 150
+        },
+        {
+            "index": 1,
+            "symbol": "NIFTY",
+            "instrument": "options",
+            "type": "put",
+            "strike": 12100,
+            "ST": "start date",
+            "ND": "end date",
+            "ED": "expiry date",
+            "TT": "SELL",
+            "OPR": 203,
+            "CPR": 150
+        },
+        {
+            "index": 2,
+            "symbol": "NIFTY",
+            "instrument": "options",
+            "type": "future",
+            "strike": null,
+            "ST": "start date",
+            "ND": "end date",
+            "ED": "expiry date",
+            "TT": "BUY",
+            "OPR": 203,
+            "CPR": 150
+        }
+    ]
+}

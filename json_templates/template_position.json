@@ -1,0 +1,49 @@
+{
+    "position": {
+        "NAME": "A USER GIVEN NAME",
+        "ST": "DATE",
+        "ND": "DATE",
+        "SYMBOL": "SYMBOL",
+        "legs": [
+            {
+                "leg": {
+                    "Name": "position",
+                    "ST": "START DATE",
+                    "ND": "END DATE",
+                    "ED": "EXPIRY DATE",
+                    "STRIKE": "STRIKE",
+                    "VIX": 0.0,
+                    "IV": 0.0,
+                    "GREEK": {
+                        "VOL": 0.0,
+                        "THETA": 0.0,
+                        "GAMMA": 0.0,
+                        "VEGA": 0.0
+                    },
+                    "PRICE": 0.0,
+                    "FUTURE": 0.0,
+                    "SPOT": 0.0,
+                    "PROFIT": 0.0,
+                    "INSTRUMENT": "FUT OR OPT",
+                    "TT": 1,
+                    "HISTORY": [
+                        {
+                            "DATE": "",
+                            "VIX": 0.0,
+                            "IV": 0.0,
+                            "GREEK": {
+                                "VOL": 0.0,
+                                "THETA": 0.0,
+                                "GAMMA": 0.0,
+                                "VEGA": 0.0
+                            },
+                            "PRICE": 0.0,
+                            "FUTURE": 0.0,
+                            "SPOT": 0.0
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
