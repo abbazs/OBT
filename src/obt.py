@@ -25,7 +25,7 @@ class obt(object):
     def __init__(self):
         try:
             start_logger()
-            self.db = hdf5db.from_path(r"D:/Work/GitHub/hdf5db/indexdb.hdf")
+            self.db = hdf5db.from_path(r"/home/abbas/work/github/hdf5db/indexdb.hdf")
             self.spot = None
             """ Symbol to be tested """
             self._SYMBOL = None
@@ -66,7 +66,7 @@ class obt(object):
             self._SINCR = None
         except Exception as e:
             print_exception(e)
-    
+
     @property
     def OUTPUT(self):
         if self.ODF is None:
@@ -154,9 +154,7 @@ class obt(object):
     def SINCR(self):
         """ Number of days to ahead of expiry to process """
         if self._SINCR is None:
-            raise Exception(
-                "SINCR is None - Strike increment interval is none."
-            )
+            raise Exception("SINCR is None - Strike increment interval is none.")
         else:
             return self._SINCR
 
@@ -367,8 +365,8 @@ class obt(object):
             df = df.assign(WIDTH=df.UBK - df.LBK)
             df = df.assign(CBK=df.CS + (tp * self.SSAF))
             df = df.assign(PBK=df.PS - (tp * self.SSAF))
-            df = df.assign(CBS=(df.CBK/self.SINCR).apply(np.floor) * self.SINCR)
-            df = df.assign(PBS=(df.PBK/self.SINCR).apply(np.ceil) * self.SINCR)
+            df = df.assign(CBS=(df.CBK / self.SINCR).apply(np.floor) * self.SINCR)
+            df = df.assign(PBS=(df.PBK / self.SINCR).apply(np.ceil) * self.SINCR)
             df = df.assign(UW=df.CBK - df.FUTURE)
             df = df.assign(LW=df.FUTURE - df.PBK)
             df = df.assign(WR=df.UW / df.LW)
