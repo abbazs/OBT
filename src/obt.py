@@ -8,16 +8,17 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sqlalchemy import create_engine
 
 from src.columns import POSITION_COLUMNS
 from src.dutil import get_current_date, last_TH_of_months_between_dates, process_date
 from src.excel_util import (
     add_style,
+    create_inputsheet,
     create_summary_sheet,
     create_worksheet,
-    create_inputsheet,
 )
-from src.hdf5db import hdf5db
+from src.nsedb import nsedb
 from src.log import print_exception, start_logger
 
 
@@ -25,7 +26,7 @@ class obt(object):
     def __init__(self):
         try:
             start_logger()
-            self.db = hdf5db.from_path(r"/home/abbas/work/github/hdf5db/indexdb.hdf")
+            self.db = nsedb()
             self.spot = None
             """ Symbol to be tested """
             self._SYMBOL = None
@@ -273,7 +274,7 @@ class obt(object):
         # ST - START DATE
         # ED - EXPIRY DATE
         # ND - END DATE
-        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUTIDX")
+        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUT")
         expd = expd.rename(columns={"EXPIRY_DT": "ED"})
         expd = expd.assign(ST=expd.shift(self.MONTH) + pd.Timedelta("1Day"))
         expd = expd.assign(ND=expd["ED"])
@@ -298,7 +299,7 @@ class obt(object):
         # ST - START DATE
         # ED - EXPIRY DATE
         # ND - END DATE
-        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUTIDX")
+        expd = self.db.get_past_n_expiry_dates(num_expiry, "FUT")
         expd = expd.rename(columns={"EXPIRY_DT": "ED"})
         expd = expd.assign(ST=expd.ED - pd.Timedelta(self.NDAYS, "D"))
         expd = expd.assign(ND=expd["ED"])
@@ -502,7 +503,6 @@ class obt(object):
             vx = vix[["CLOSE"]].rename(columns={"CLOSE": "VIX"})
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
             df.loc[df.FUTURE.isna(), "FUTURE"] = df.SPOT
-            atm = self.get_atm_strike()
             df = df.assign(ATM=self.ATM[self.ST :])
             # call starting price
             if cpr is not None:
@@ -598,7 +598,7 @@ class obt(object):
                 df = self.db.get_all_strike_data(self.ST, self.ND, self.ED)
                 self.ATM = df.groupby("TIMESTAMP").apply(self.process_atm)
 
-            atml = self.ATM[self.ST :]
+            atml = self.ATM[self.ST:]
             atmf = atml[atml > 0]
             atm = atmf.iloc[0]
             self.ST = atmf.index[0]

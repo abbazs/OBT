@@ -5,6 +5,22 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: run.py ssr NBCC",
+            "type": "python",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "program": "${workspaceFolder}/run.py",
+            "args": [
+                "-ssaf=0.95",
+                "-symbol=NBCC",
+                "-noad=1",
+                "ssr",
+                "-month=1",
+                "-nexp=2",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: run.py sstg",
             "type": "python",
             "request": "launch",

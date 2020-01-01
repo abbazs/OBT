@@ -11,8 +11,9 @@ from src.obt import obt
 @click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
 @click.option("-ssaf", help="Strangle or straddle adjustment factor", default=0.01)
 @click.option("-noad", help="No adjustment if num days to expiry is less than noad", default=5)
+@click.option("-sincr", help="Strike increment rate", default=50)
 @click.pass_context
-def cli(ctx, symbol, mitr, ssaf, noad):
+def cli(ctx, symbol, mitr, ssaf, noad, sincr):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
@@ -20,6 +21,7 @@ def cli(ctx, symbol, mitr, ssaf, noad):
     ob.MITR = mitr
     ob.SSAF = ssaf
     ob.NOAD = noad
+    ob.SINCR = sincr
     ctx.obj["OBT"] = ob
 
 
@@ -160,7 +162,7 @@ def ssrnd(ctx, nexp, ndays):
     ob.NDAYS = ndays
     ob.SSR_ndays_before(nexp)
 
-@cli.command(help="Study straddles for start, end and expiry days")
+@cli.command(help="Study straddles for start, end and expiry day")
 @click.pass_context
 @click.option("-ST", help="Start date", default=None)
 @click.option("-ND", help="End date", default=None)
