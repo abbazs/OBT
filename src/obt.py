@@ -159,10 +159,6 @@ class obt(object):
         else:
             return self._SINCR
 
-    @SINCR.setter
-    def SINCR(self, value):
-        self._SINCR = value
-
     @property
     def NEXP(self):
         """ Number of expirys to process """
@@ -503,7 +499,9 @@ class obt(object):
             vx = vix[["CLOSE"]].rename(columns={"CLOSE": "VIX"})
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
             df.loc[df.FUTURE.isna(), "FUTURE"] = df.SPOT
+            self.get_atm_strike()
             df = df.assign(ATM=self.ATM[self.ST :])
+            self.get_strike_increment()
             # call starting price
             if cpr is not None:
                 df["CALL_CLOSE"].iat[0] = cpr
@@ -587,6 +585,26 @@ class obt(object):
             return atm
         except:
             print(f"Error getting atm for {df.name:%Y-%m-%d}")
+            return None
+
+    def get_strike_increment(self):
+        """
+        Gets strike and assigns it to SINCR
+        """
+        try:
+            if self._SINCR is None:
+                df = self.db.get_all_strike_data(self.ST, self.ST, self.ED)
+                strikes = df["STRIKE_PR"].drop_duplicates().sort_values()
+                sinr = strikes - strikes.shift(1)
+                sinr = sinr.dropna()
+                if all(sinr == sinr.iloc[0]):
+                    self._SINCR = sinr.iloc[0]
+                else:
+                    raise Exception("Unable to determine strike increment...")
+        except Exception as e:
+            print("Error getting atm strike ", end="-")
+            self.print_inputs()
+            print_exception(e)
             return None
 
     def get_atm_strike(self):
@@ -802,7 +820,6 @@ class obt(object):
         self.ST = conf["ST"]
         self.ND = conf["ND"]
         self.ED = conf["ED"]
-        self.SINCR = conf["SINCR"]
         sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
         rdf = self.repair_position_by_straddle(sdf)
         file_name = (

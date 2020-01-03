@@ -11,9 +11,8 @@ from src.obt import obt
 @click.option("-mitr", help="Max number of times positon can be adjusted", default=5)
 @click.option("-ssaf", help="Strangle or straddle adjustment factor", default=0.01)
 @click.option("-noad", help="No adjustment if num days to expiry is less than noad", default=5)
-@click.option("-sincr", help="Strike increment rate", default=50)
 @click.pass_context
-def cli(ctx, symbol, mitr, ssaf, noad, sincr):
+def cli(ctx, symbol, mitr, ssaf, noad):
     """ Options back testing """
     ctx.obj["SYMBOL"] = symbol.upper()
     ob = obt()
@@ -21,7 +20,6 @@ def cli(ctx, symbol, mitr, ssaf, noad, sincr):
     ob.MITR = mitr
     ob.SSAF = ssaf
     ob.NOAD = noad
-    ob.SINCR = sincr
     ctx.obj["OBT"] = ob
 
 

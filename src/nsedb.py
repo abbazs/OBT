@@ -21,7 +21,7 @@ class nsedb(object):
         self.db = create_engine("postgresql://postgres@localhost:5432/nsedb")
         self.md = MetaData(self.db)
         self.tfno = None
-        self.tidx = Table("idx", self.md, autoload=True)
+        self.tidx = None
         self.tvix = Table("vix", self.md, autoload=True)
         pass
 
@@ -61,10 +61,13 @@ class nsedb(object):
     def set_table(self):
         if self.SYMBOL == "NIFTY":
             self.tfno = Table("fno_nifty", self.md, autoload=True)
+            self.tidx = Table("idx", self.md, autoload=True)
         elif self.SYMBOL == "BANKNIFTY":
             self.tfno = Table("fno_banknifty", self.md, autoload=True)
+            self.tidx = Table("idx", self.md, autoload=True)
         else:
             self.tfno = Table("fno", self.md, autoload=True)
+            self.tidx = Table("spot", self.md, autoload=True)
 
     def get_past_n_expiry_dates(self, n, itype='FUT'):
         try:

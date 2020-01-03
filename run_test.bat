@@ -16,3 +16,9 @@ REM ssrnd  Study straddles for given number of expiry and ndays before
 python run.py -mitr=10 -ssaf=0.95 -noad=1 ssrnd -nexp=30 -ndays=90
 REM ssrs   Study straddles for start, end and expiry days
 python run.py -mitr=10 -ssaf=0.95 -noad=1 ssrs -ST=30AUG2019 -ND=26SEP2019 -ED=26SEP2019
+# ssr NBCC   Study straddles for given number of expiry and month current month...
+python run.py -symbol=NBCC -mitr=20 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
+python run.py -symbol=TCS -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
+python run.py -symbol=MARUTI -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
+python run.py -symbol=ZEEL -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
+python run.py -symbol=LUPIN -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
