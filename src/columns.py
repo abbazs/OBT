@@ -9,10 +9,10 @@ POSITION_COLUMNS = [
     "CS",
     "PUT_CLOSE",
     "CALL_CLOSE",
-    "TP",
-    "APNL",
-    "PNL",
-    "WIDTH",
+    "TP", # TARGET PROFIT
+    "APNL", # ACTUAL PROFIT AND LOSS
+    "PNL", # PROFT AND LOSS
+    "WIDTH", # ALLOWABLE SWING OF ATM
     "PBS",  # PUT STOP LOSS STRIKE
     "CBS",  # CALL STOP LOSS STRIKE
     "ITP",  # Initial target profit

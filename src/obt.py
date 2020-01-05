@@ -343,11 +343,8 @@ class obt(object):
         print(f" -ED={self.ED:%Y-%m-%d}", end=",")
 
     def calculate_pnl(self, df):
-        csp = df.iloc[0]["CALL_CLOSE"]
-        # put starting price
-        psp = df.iloc[0]["PUT_CLOSE"]
         # total premium
-        tp = csp + psp
+        tp = df[["CALL_CLOSE", "PUT_CLOSE"]].iloc[0].sum()
         # APNL - Actual profit and loss with out adjustments
         df = df.assign(APNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
         df = self.calculate_repaired_pnl(df, tp)
@@ -357,16 +354,11 @@ class obt(object):
         try:
             df = df.assign(TP=tp)
             df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
-            df = df.assign(UBK=df.CS + tp)
-            df = df.assign(LBK=df.PS - tp)
-            df = df.assign(WIDTH=df.UBK - df.LBK)
             df = df.assign(CBK=df.CS + (tp * self.SSAF))
             df = df.assign(PBK=df.PS - (tp * self.SSAF))
             df = df.assign(CBS=(df.CBK / self.SINCR).apply(np.floor) * self.SINCR)
             df = df.assign(PBS=(df.PBK / self.SINCR).apply(np.ceil) * self.SINCR)
-            df = df.assign(UW=df.CBK - df.FUTURE)
-            df = df.assign(LW=df.FUTURE - df.PBK)
-            df = df.assign(WR=df.UW / df.LW)
+            df = df.assign(WIDTH=df.CBS - df.PBS)
             return df
         except Exception as e:
             print_exception(e)
@@ -463,9 +455,7 @@ class obt(object):
         df.loc[fno.index, ["PUT_CLOSE", "PS"]] = fno
         # Calculate new target profit
         tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
-        adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
-        adc = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-        tp = tpl.sum() + adp + adc
+        tp = tpl.sum() + dfii.PNL
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
