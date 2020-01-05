@@ -13,25 +13,12 @@ POSITION_COLUMNS = [
     "APNL",
     "PNL",
     "WIDTH",
-    "PBS",
-    "CBS",
-    "PBK",  # Put breakeven
-    "CBK",  # Call breakeven
+    "PBS",  # PUT STOP LOSS STRIKE
+    "CBS",  # CALL STOP LOSS STRIKE
     "ITP",  # Initial target profit
     "ADN",  # Adjustment number
     "DTE",  # Days to expiry
-    "DTER", # Days to expiry in reverse
-    "LBK",  # Lower breakeven
-    "UBK",  # Upper breakeven
-    "LW",  # Lower width
-    "UW",  # Upper width
-    "WR",  # Ratio of upper and lower width
-    "FOI",
-    "FCOI",
-    "COI",
-    "CCOI",
-    "POI",
-    "PCOI",
+    "DTER",  # Days to expiry in reverse
 ]
 
 CHART_COLUMNS = ["DTE", "PBK", "CBK", "PS", "CS", "SPOT", "FUTURE", "APNL", "PNL"]

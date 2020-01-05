@@ -456,11 +456,11 @@ class obt(object):
         # Adjust Call
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", atm)
         fno = self.rename_call_columns(fno)
-        df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
+        df.loc[fno.index, ["CALL_CLOSE", "CS"]] = fno
         # Adjust Put
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", atm)
         fno = self.rename_put_columns(fno)
-        df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
+        df.loc[fno.index, ["PUT_CLOSE", "PS"]] = fno
         # Calculate new target profit
         tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
         adp = dfk.PUT_CLOSE - dfii.PUT_CLOSE
@@ -733,7 +733,7 @@ class obt(object):
             price = (conf["CPR"] + conf["PPR"]) / 2
         else:
             price = sdf["TP"].iloc[0] / 2
-        rdf = self.repair_position_by_price(sdf, price)
+        self.repair_position_by_price(sdf, price)
         file_name = (
             f"{self.SYMBOL}_SSG_custom_"
             f"{self.ED:%Y-%b-%d}_"

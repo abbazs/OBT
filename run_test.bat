@@ -22,3 +22,7 @@ python run.py -symbol=TCS -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
 python run.py -symbol=MARUTI -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
 python run.py -symbol=ZEEL -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
 python run.py -symbol=LUPIN -mitr=10 -ssaf=0.95 -noad=1 ssr -month=1 -nexp=24
+python run.py -symbol=LUPIN -mitr=10 -ssaf=0.95 -noad=1 ssrs -ST=27DEC2019 -ND=30jan2020 -ED=30jan2020
+python run.py -symbol=banknifty -mitr=10 -ssaf=0.95 -noad=1 ssrs -ST=27DEC2019 -ND=30jan2020 -ED=30jan2020
+python run.py -symbol=NIFTY -mitr=10 -ssaf=0.95 -noad=1 ssr -month=2 -nexp=24
+python run.py -symbol=NIFTY -mitr=10 -ssaf=0.95 -noad=1 ssrc -ndays=75 -nexp=24
