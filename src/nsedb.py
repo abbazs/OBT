@@ -145,6 +145,16 @@ class nsedb(object):
             print_exception(e)
             return None
 
+    @staticmethod
+    def nr7(dfs):
+        try:
+            dfx = dfs[["LOW","HIGH"]].diff(axis=1).tail(7)
+            nrs = dfx["HIGH"]
+            return all(nrs.iloc[0:-1]>=nrs.iloc[-1])
+        except Exception as e:
+            print_exception(e)
+            return False
+
     def get_index_data_between_dates(self, st, nd):
         try:
             s = self.SYMBOL

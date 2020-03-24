@@ -65,6 +65,10 @@ class obt(object):
             self.ATM = None
             """ STRIKE INCREMENT INTERVAL """
             self._SINCR = None
+            """ MAX PROFT LIMIT """
+            self._MAXPL = None
+            """ STRIKE PRICE """
+            self._STRP = None
         except Exception as e:
             print_exception(e)
 
@@ -186,6 +190,30 @@ class obt(object):
         self._OPFN = value
 
     @property
+    def MAXPL(self):
+        """ Maximum profit limit """
+        if self._MAXPL is None:
+            return self.STRP * 0.75
+        else:
+            return self._MAXPL
+
+    @MAXPL.setter
+    def MAXPL(self, value):
+        self._MAXPL = value
+
+    @property
+    def STRP(self):
+        """ STRIKE PRICE """
+        if self._STRP is None:
+            raise Exception("STRP is None - strike price value not set.")
+        else:
+            return self._STRP
+
+    @STRP.setter
+    def STRP(self, value):
+        self._STRP = value
+
+    @property
     def SYMBOL(self):
         """symbol to be processed"""
         if self._SYMBOL is None:
@@ -245,6 +273,7 @@ class obt(object):
                 "SYMBOL": self.SYMBOL,
                 "MONTH": self._MONTH,
                 "NDAYS": self._NDAYS,
+                "STRIKE_PRICE": self._STRP,
                 "NO_ADJUSTMENT_DAYS": self.NOAD,
                 "MAX_NUMBER_OF_ADJUSTMENTS": self.MITR,
                 "ADJUSTMENT_FACTOR": self.SSAF,
@@ -344,7 +373,7 @@ class obt(object):
 
     def calculate_pnl(self, df):
         # total premium
-        tp = df[["CALL_CLOSE", "PUT_CLOSE"]].iloc[0].sum()
+        tp = df["ITP"].iloc[0]
         # APNL - Actual profit and loss with out adjustments
         df = df.assign(APNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
         df = self.calculate_repaired_pnl(df, tp)
@@ -353,7 +382,8 @@ class obt(object):
     def calculate_repaired_pnl(self, df, tp):
         try:
             df = df.assign(TP=tp)
-            df = df.assign(PNL=tp - df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
+            df = df.assign(CV=df[["CALL_CLOSE", "PUT_CLOSE"]].sum(axis=1))
+            df = df.assign(PNL=tp - df.CV)
             df = df.assign(CBK=df.CS + (tp * self.SSAF))
             df = df.assign(PBK=df.PS - (tp * self.SSAF))
             df = df.assign(CBS=(df.CBK / self.SINCR).apply(np.floor) * self.SINCR)
@@ -383,7 +413,11 @@ class obt(object):
                 return False
         # dfloc
         sdf = df[self.ST :]
-        dfs = sdf.query("ATM>=@sdf.CBS.iloc[0] or ATM<@sdf.PBS.iloc[0]")
+        dfs = sdf.query(
+            "ATM>=@sdf.CBS.iloc[0] or "
+            "ATM<@sdf.PBS.iloc[0] or "
+            "(CV<=20 and DTE>=20)" # For now leave it as constant
+        )
         if len(dfs) == 0:
             print(f"Not adjusting any further position in control...")
             return False
@@ -398,7 +432,7 @@ class obt(object):
             else:
                 return dfii
 
-    def repair_position_by_price(self, df, price):
+    def repair_position_by_price(self, df):
         """ Repairs a strangle position
         Which ever leg is in profit, more than 50% of price
         close it and move to the next strike available at
@@ -407,40 +441,47 @@ class obt(object):
         """
         dfii = self.check_adjustment_required(df)
         if dfii is False:
+            print("Done adjustment")
+            df = df.assign(MAXP=df.PNL.max())
             return df
         print("Need to adjust")
-        dfk = df[self.ST :].iloc[0]
         self.ST = dfii.name
-        adp_pnl = dfk.PUT_CLOSE - dfii.PUT_CLOSE
-        adc_pnl = dfk.CALL_CLOSE - dfii.CALL_CLOSE
-        print(f"Adjustment profit {adc_pnl:.2f}")
-        print(f"Adjustment loss {adp_pnl:.2f}")
+        dfk = df[self.ST :].iloc[0]
+        print(f"Adjustment done at pnl {dfk.PNL:.2f} - {self.ST:%Y-%m-%d}")
         dfc = self.db.get_all_strike_data(dfii.name, dfii.name, dfii.ED)
+        # Get call and put strikes
+        cs = self.get_strike_price(dfc, "CE", self.STRP)
+        ps = self.get_strike_price(dfc, "PE", self.STRP)
+        # Check if PUT strike is less than or equal to CALL strike
+        if ps > cs:
+            atm = self.get_atm_strike()
+            print(f"Adjusting to ATM strike {atm} insted of price given strike")
+            print(f"Price given strikes PUT={ps}, CALL={cs}")
+            ps = cs = atm
         # Adjust call
-        cs = self.get_strike_price(dfc, "CE", price)
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "CE", cs)
         fno = self.rename_call_columns(fno)
-        df.loc[fno.index, ["CALL_CLOSE", "COI", "CCOI", "CS"]] = fno
+        df.loc[fno.index, ["CALL_CLOSE", "CS"]] = fno
         # Adjust put
-        ps = self.get_strike_price(dfc, "PE", price)
         fno = self.db.get_strike_price(dfii.name, dfii.ED, dfii.ED, "PE", ps)
         fno = self.rename_put_columns(fno)
-        df.loc[fno.index, ["PUT_CLOSE", "POI", "PCOI", "PS"]] = fno
+        df.loc[fno.index, ["PUT_CLOSE", "PS"]] = fno
         # calculate new target profit
         tpl = df.loc[fno.index, ["CALL_CLOSE", "PUT_CLOSE"]].iloc[0]
-        tp = tpl.sum() + adp_pnl + adc_pnl
+        tp = tpl.sum() + dfk.PNL
         #
         dfr = self.calculate_repaired_pnl(df.loc[fno.index], tp)
         df.loc[fno.index] = dfr
         df.loc[fno.index, "ADN"] = self.CITR
         self.CITR += 1
-        return self.repair_position_by_price(df, price)
+        return self.repair_position_by_price(df)
 
     def repair_position_by_straddle(self, df):
         """ Repairs a straddle position
         """
         dfii = self.check_adjustment_required(df)
         if dfii is False:
+            df = df.assign(MAXP=df.PNL.max())
             return df
         dfk = df[self.ST :].iloc[0]
         self.ST = dfii.name
@@ -490,7 +531,7 @@ class obt(object):
             df = spt.join([vx, fut, fnocs, fnops], how="outer")
             df.loc[df.FUTURE.isna(), "FUTURE"] = df.SPOT
             self.get_atm_strike()
-            df = df.assign(ATM=self.ATM[self.ST :])
+            df = df.assign(ATM=self.ATM[self.ST :].STRIKE_PR)
             self.get_strike_increment()
             # call starting price
             if cpr is not None:
@@ -518,7 +559,7 @@ class obt(object):
             print_exception(e)
             return None
 
-    def build_ss_by_price(self, price):
+    def build_ss_by_price(self):
         """
         Builds both strangle and straddle
         Returns
@@ -540,13 +581,13 @@ class obt(object):
             df = self.db.get_all_strike_data(st, snd, expd)
             # Get the first group only
             df = df[df["TIMESTAMP"] == df["TIMESTAMP"].unique()[0]]
-            cs = self.get_strike_price(df, "CE", price)
-            ps = self.get_strike_price(df, "PE", price)
+            cs = self.get_strike_price(df, "CE", self.STRP)
+            ps = self.get_strike_price(df, "PE", self.STRP)
             return self.build_ss(cs, ps)
         except Exception as e:
             print("Error processing", end="-")
             self.print_inputs()
-            print(f" price={price}")
+            print(f" price={self.STRP}")
             print_exception(e)
             return None
 
@@ -566,12 +607,13 @@ class obt(object):
             ).reset_index(drop=True)
             # Difference between call and put price
             opm = opm.assign(DIF=(opm["CLOSE_C"] - opm["CLOSE_P"]).abs())
-            # Average price
-            opm = opm.assign(PR=opm[["CLOSE_P", "CLOSE_C"]].mean(axis=1))
+            # Average of call and put price
+            opm = opm.assign(APR=opm[["CLOSE_P", "CLOSE_C"]].mean(axis=1))
+            # Sum of call and put price
+            opm = opm.assign(TPR=opm[["CLOSE_P", "CLOSE_C"]].sum(axis=1))
             # Starting day may not be a trading day, hence do this.
             idx = opm["DIF"].reset_index(drop=True).idxmin()
-            atm = opm[["STRIKE_PR", "CLOSE_P", "CLOSE_C", "PR", "DIF"]].iloc[idx]
-            atm = atm.STRIKE_PR
+            atm = opm[["STRIKE_PR", "CLOSE_P", "CLOSE_C", "TPR", "APR", "DIF"]].iloc[idx]
             return atm
         except:
             print(f"Error getting atm for {df.name:%Y-%m-%d}")
@@ -590,7 +632,11 @@ class obt(object):
                 if all(sinr == sinr.iloc[0]):
                     self._SINCR = sinr.iloc[0]
                 else:
-                    raise Exception("Unable to determine strike increment...")
+                    self._SINCR = sinr.min()
+                    print(
+                        "Strike increment is not uniform "
+                        f"using min strike value {self._SINCR}..."
+                    )
         except Exception as e:
             print("Error getting atm strike ", end="-")
             self.print_inputs()
@@ -606,18 +652,38 @@ class obt(object):
                 df = self.db.get_all_strike_data(self.ST, self.ND, self.ED)
                 self.ATM = df.groupby("TIMESTAMP").apply(self.process_atm)
 
-            atml = self.ATM[self.ST:]
+            atml = self.ATM[self.ST :]
             atmf = atml[atml > 0]
             atm = atmf.iloc[0]
             self.ST = atmf.index[0]
-            return atm
+            return atm.STRIKE_PR
         except Exception as e:
             print("Error getting atm strike ", end="-")
             self.print_inputs()
             print_exception(e)
             return None
 
-    def ssg(self, expd, price):
+    def summarize(self, smry, ewb, full_file_name):
+        try:
+            # save work book
+            summary = pd.DataFrame(smry)
+            summary = summary.assign(
+                MAXP=np.where(summary.MAXP >= self.MAXPL, self.MAXPL, summary.PNL)
+            )
+            create_summary_sheet(ewb, summary, self.OPFN)
+            self.ODF = summary.resample("Y").sum()[["APNL", "PNL", "MAXP"]]
+            self.save_inputs_to_excel(ewb)
+            ewb.book._sheets.reverse()
+            ewb.save()
+            print(f"Saved file {full_file_name}")
+        except Exception as e:
+            print(f"Error Creating summary {full_file_name}")
+            print_exception(e)
+
+    def ssg(self, expd):
+        """
+        SSG - SHORT STRANGLE
+        """
         full_file_name = Path(self.out_path).joinpath(self.OPFN)
         ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
         add_style(ewb)
@@ -627,21 +693,40 @@ class obt(object):
                 self.ST = x.ST
                 self.ND = x.ND
                 self.ED = x.ED
-                sdf = self.build_ss_by_price(price)
-                rdf = self.repair_position_by_price(sdf, price)
+                sdf = self.build_ss_by_price()
+                rdf = self.repair_position_by_price(sdf)
                 create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
-                smry.append(sdf.iloc[-1])
+                smry.append(rdf.iloc[-1])
             except Exception as e:
                 print_exception(e)
                 print("Error processing last...")
-        # save work book
-        summary = pd.DataFrame(smry)
-        create_summary_sheet(ewb, summary, self.OPFN)
-        self.ODF = summary.resample("Y").sum()[["APNL", "PNL"]]
-        self.save_inputs_to_excel(ewb)
-        ewb.book._sheets.reverse()
-        ewb.save()
-        print(f"Saved file {full_file_name}")
+        # summarize
+        self.summarize(smry, ewb, full_file_name)
+
+    def ssr(self, expd):
+        """
+        SSR - SHORT STRADDLE
+        """
+        full_file_name = Path(self.out_path).joinpath(self.OPFN)
+        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
+        add_style(ewb)
+        smry = []
+        for x in expd.itertuples():
+            try:
+                self.ST = x.ST
+                self.ND = x.ND
+                self.ED = x.ED
+                atm = self.get_atm_strike()
+                self.STRP = self.ATM.TPR.iloc[0]
+                sdf = self.build_ss(atm, atm)
+                rdf = self.repair_position_by_straddle(sdf)
+                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
+                smry.append(rdf.iloc[-1])
+            except Exception as e:
+                print_exception(e)
+                print("Error processing last...")
+        # summarize
+        self.summarize(smry, ewb, full_file_name)
 
     def e2e_SSG_by_price(self, num_expiry, price):
         """
@@ -654,6 +739,7 @@ class obt(object):
         price : double
             Strangle to be created at which price
         """
+        self.STRP = price
         expd = self.get_expiry_df(num_expiry)
         #
         self.OPFN = (
@@ -664,7 +750,7 @@ class obt(object):
             f"_{price}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
-        self.ssg(expd, price)
+        self.ssg(expd)
 
     def SSG_ndays_before_by_price(self, num_expiry, price):
         """
@@ -677,6 +763,7 @@ class obt(object):
         price : float
             Price to create the strangle
         """
+        self.STRP = price
         expd = self.get_expiry_df_before_num_days(num_expiry)
         self.OPFN = (
             f"{self.SYMBOL}_SSG_{self.NEXP}"
@@ -686,7 +773,7 @@ class obt(object):
             f"_{price}"
             f"_{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
-        self.ssg(expd, price)
+        self.ssg(expd)
 
     def e2e_SSG_SE_by_price(self, st, nd, ed, price):
         """ Creates strangle for single expiry day
@@ -694,8 +781,9 @@ class obt(object):
         self.ST = st
         self.ND = nd
         self.ED = ed
-        sdf = self.build_ss_by_price(price)
-        rdf = self.repair_position_by_price(sdf, price)
+        self.STRP = price
+        sdf = self.build_ss_by_price()
+        rdf = self.repair_position_by_price(sdf)
         file_name = (
             f"{self.SYMBOL}_SSG_"
             f"{self.ED:%Y-%b-%d}_"
@@ -720,14 +808,14 @@ class obt(object):
         self.ED = conf["ED"]
         sdf = self.build_ss(conf["CS"], conf["PS"], conf["CPR"], conf["PPR"])
         if (conf["CPR"] is not None) and (conf["PPR"] is not None):
-            price = (conf["CPR"] + conf["PPR"]) / 2
+            self.STPR = (conf["CPR"] + conf["PPR"]) / 2
         else:
-            price = sdf["TP"].iloc[0] / 2
-        self.repair_position_by_price(sdf, price)
+            self.STPR = sdf["TP"].iloc[0] / 2
+        self.repair_position_by_price(sdf)
         file_name = (
             f"{self.SYMBOL}_SSG_custom_"
             f"{self.ED:%Y-%b-%d}_"
-            f"price_{price:.2f}_"
+            f"price_{self.STPR:.2f}_"
             f"{datetime.now():%Y-%b-%d_%H-%M-%S}.xlsx"
         )
         full_file_name = Path(self.out_path).joinpath(file_name)
@@ -738,33 +826,6 @@ class obt(object):
         print(f"Saved {full_file_name}")
         self.ODF = sdf
         return sdf
-
-    def ssr(self, expd):
-        full_file_name = Path(self.out_path).joinpath(self.OPFN)
-        ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
-        add_style(ewb)
-        smry = []
-        for x in expd.itertuples():
-            try:
-                self.ST = x.ST
-                self.ND = x.ND
-                self.ED = x.ED
-                atm = self.get_atm_strike()
-                sdf = self.build_ss(atm, atm)
-                rdf = self.repair_position_by_straddle(sdf)
-                create_worksheet(ewb, rdf, f"{x.ED:%Y-%m-%d}", self.OPFN, index=x.Index)
-                smry.append(sdf.iloc[-1])
-            except Exception as e:
-                print_exception(e)
-                print("Error processing last...")
-        # save work book
-        summary = pd.DataFrame(smry)
-        create_summary_sheet(ewb, summary, self.OPFN)
-        self.ODF = summary.resample("Y").sum()[["APNL", "PNL"]]
-        self.save_inputs_to_excel(ewb)
-        ewb.book._sheets.reverse()
-        ewb.save()
-        print(f"Saved file {full_file_name}")
 
     def e2e_SSR(self, num_expiry):
         """
@@ -820,11 +881,11 @@ class obt(object):
         full_file_name = Path(self.out_path).joinpath(file_name)
         ewb = pd.ExcelWriter(full_file_name, engine="openpyxl")
         add_style(ewb)
-        create_worksheet(ewb, sdf, f"{self.ED:%Y-%m-%d}", file_name)
+        create_worksheet(ewb, rdf, f"{self.ED:%Y-%m-%d}", file_name)
         ewb.save()
         print(f"Saved {full_file_name}")
-        self.ODF = sdf
-        return sdf
+        self.ODF = rdf
+        return rdf
 
     def e2e_SSR_SE(self, st, nd, ed):
         """ Creates straddle for single expiry day

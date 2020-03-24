@@ -10,6 +10,7 @@ POSITION_COLUMNS = [
     "PUT_CLOSE",
     "CALL_CLOSE",
     "TP", # TARGET PROFIT
+    "CV", # CURRENT VALUE OF POSITION
     "APNL", # ACTUAL PROFIT AND LOSS
     "PNL", # PROFT AND LOSS
     "WIDTH", # ALLOWABLE SWING OF ATM
@@ -19,6 +20,7 @@ POSITION_COLUMNS = [
     "ADN",  # Adjustment number
     "DTE",  # Days to expiry
     "DTER",  # Days to expiry in reverse
+    # "MAXP", # Maximum profit achieved
 ]
 
 CHART_COLUMNS = ["DTE", "PBK", "CBK", "PS", "CS", "SPOT", "FUTURE", "APNL", "PNL"]
